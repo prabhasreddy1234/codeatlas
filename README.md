@@ -1,8 +1,8 @@
 # CodeAtlas
 
-Deterministic code graphs for Android projects on GitHub. Sign in with GitHub, pick a repository and branch, and CodeAtlas parses the Kotlin and Java sources with Tree-sitter and shows an interactive, layered graph. **No LLM or AI API is used anywhere.**
+Deterministic code graphs for Python and Android projects on GitHub. Sign in with GitHub, pick a repository and branch, and CodeAtlas analyzes Python, Kotlin, and Java source and shows an interactive, layered graph. **No LLM or AI API is used anywhere.**
 
-- Backend: Python 3.11+, FastAPI, Tree-sitter, Git CLI, SQLite + JSON files
+- Backend: Python 3.11+, FastAPI, Python AST, Tree-sitter, Git CLI, SQLite + JSON files
 - Frontend: React, TypeScript, Vite, React Flow (`@xyflow/react`), Dagre layout, Lucide + simple-icons
 
 ## Quick start
@@ -58,7 +58,7 @@ Always open the UI via `http://localhost:5173` (the Vite dev server proxies `/ap
 2. POST requests require an `X-CSRF-Token` header and an allowed `Origin`.
 3. Generate: verify branch via GitHub API → shallow clone/fetch into `.codeatlas-data/repos` → checkout exact branch → record commit SHA → analyze.
 4. Graphs are stored as JSON under `.codeatlas-data/graphs/{owner}/{repo}/{branch}/{sha}.json`. If the commit is unchanged, the stored graph is reused (use *Re-index* to force).
-5. The UI shows a focused overview (Android entry points and their neighbors); expand callers, dependencies, or members per node.
+5. The UI shows a focused overview of code entry points and their neighbors; expand callers, dependencies, or members per node.
 
 Repository code is treated as untrusted: it is only parsed, never executed; git hooks are disabled, symlinks are skipped, owner/repo/branch/paths are validated, and files over the size limit are skipped.
 
@@ -74,6 +74,7 @@ cd frontend && npm run typecheck && npm run build
 Resolution is syntax- and index-based, not compiler-grade. CodeAtlas marks each edge `confirmed`, `inferred`, `external` or `unresolved` and never invents links for unresolvable targets.
 
 - No type inference beyond declared types: overloads are matched by arity only; chained call receivers are unresolved.
+- Python is parsed with the standard-library AST. Classes, methods, functions, annotations, imports, inheritance, constructor calls, and statically traceable calls are graphed; dynamic dispatch, reflection, and runtime import behavior are not evaluated.
 - Interface/abstract calls link to the interface method, not to implementations (no dynamic-dispatch resolution).
 - Reflection, service locators and Koin are not analysed. Dagger/Hilt `@Provides`/`@Binds` modules are not analysed; only `@Inject` fields/constructor parameters are linked.
 - Navigation: explicit `Intent(...::class)` and navigation-graph XML actions only. `findNavController().navigate(...)` and Compose `NavHost` routes are not resolved.
@@ -94,5 +95,5 @@ Resolution is syntax- and index-based, not compiler-grade. CodeAtlas marks each 
 | "Cannot reach backend" | Start uvicorn on port 8000 |
 | `Attribute "app" not found` | Use `--factory`: `uvicorn app.main:create_app --factory` |
 | Clone/checkout fails | Ensure `git` is installed and the branch exists; see error in UI |
-| Empty graph | The repo may contain no Kotlin/Java sources outside ignored dirs (`build`, `.gradle`, `generated`, …) |
+| Empty graph | The repo may contain no Python, Kotlin, or Java sources outside ignored dirs (`build`, `.gradle`, `generated`, …) |
 | Reset everything | Stop servers, delete `.codeatlas-data/` |

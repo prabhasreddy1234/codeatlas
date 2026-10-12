@@ -8,6 +8,7 @@ from ..schemas.graph import GraphDocument, RepositoryInfo
 from .builder import GraphBuilder
 from .java_extractor import parse_java
 from .kotlin_extractor import parse_kotlin
+from .python_extractor import parse_python
 from .scanner import scan
 
 Progress = Callable[[str, int, int, str], None]  # stage, done, total, message
@@ -21,7 +22,7 @@ def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sh
     sc = scan(root, max_file_bytes, max_files)
     warnings = list(sc.warnings[:50])
     if not sc.sources:
-        warnings.append("No Kotlin or Java source files found on this branch.")
+        warnings.append("No supported Python, Kotlin, or Java source files found on this branch.")
     builder = GraphBuilder(owner, repo, provider)
     total = len(sc.sources)
     parse_errors = 0
@@ -29,7 +30,12 @@ def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sh
         progress("parsing", i, total, f"Parsing {rel}")
         try:
             data = abs_path.read_bytes()
-            pf = parse_kotlin(rel, data) if lang == "kotlin" else parse_java(rel, data)
+            if lang == "kotlin":
+                pf = parse_kotlin(rel, data)
+            elif lang == "java":
+                pf = parse_java(rel, data)
+            else:
+                pf = parse_python(rel, data)
         except Exception as exc:  # one bad file must not abort indexing
             warnings.append(f"Failed to parse {rel}: {type(exc).__name__}")
             parse_errors += 1

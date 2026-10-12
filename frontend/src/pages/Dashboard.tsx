@@ -245,11 +245,11 @@ export default function Dashboard({ onSelection }: Props) {
                       <>
                         <h2>No code graph to display</h2>
                         <p>
-                          CodeAtlas currently graphs Kotlin and Java source files. This branch has{" "}
+                          CodeAtlas currently graphs Python, Kotlin, and Java source files. This branch has{" "}
                           {meta.stats.source_files ?? 0} supported source files.
                         </p>
                         {meta.warnings[0] && <p className="muted">{meta.warnings[0]}</p>}
-                        <p className="muted">Choose a branch or repository containing Kotlin or Java code, then generate the graph again.</p>
+                        <p className="muted">Choose a branch or repository containing Python, Kotlin, or Java code, then generate the graph again.</p>
                       </>
                     ) : (
                       <>

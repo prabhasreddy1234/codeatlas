@@ -144,6 +144,10 @@ class GraphBuilder:
         self._overrides()
         for info in self.type_infos:
             self._type_level(info)
+        for pf in self._all_files:
+            ctx = self.index.context(pf, [])
+            for call in pf.calls:
+                self._call(self.file_nodes[pf.path], None, None, call, ctx, pf)
         for fi in self.func_infos:
             self._function_level(fi)
 
@@ -167,6 +171,8 @@ class GraphBuilder:
                         target = self.index.types[cand].node.id
                     elif cand in self.index.functions:
                         target = self.index.functions[cand][0].node.id
+                    elif cand in self.pkg_nodes:
+                        target = self.pkg_nodes[cand].id
                 if target is None:
                     status, prov = "external", f"import {imp.path} (outside repository)"
                 self.edge("IMPORTS", fnode.id, target, status=status, provenance=prov,
@@ -415,7 +421,8 @@ class GraphBuilder:
                 pkg = pf.package
                 fn_cands = list(self.index.functions.get(f"{pkg}.{c.name}" if pkg else c.name, []))
                 for imp in pf.imports:
-                    if not imp.wildcard and imp.path.rsplit(".", 1)[-1] == c.name:
+                    imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
+                    if not imp.wildcard and not imp.module and imported_name == c.name:
                         fn_cands += self.index.functions.get(imp.path, [])
                     elif imp.wildcard:
                         fn_cands += self.index.functions.get(f"{imp.path}.{c.name}", [])
@@ -424,7 +431,8 @@ class GraphBuilder:
                     emit_targets(chosen, st, "top-level function (same package or import)")
                     return
                 for imp in pf.imports:
-                    if imp.path.rsplit(".", 1)[-1] == c.name and not imp.wildcard \
+                    imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
+                    if imported_name == c.name and not imp.module and not imp.wildcard \
                             and imp.path not in self.index.types:
                         external(imp.path, f"imported function {imp.path} (outside repository)")
                         return
@@ -433,6 +441,36 @@ class GraphBuilder:
                        + (f"; may be inherited from {ext[0]}" if ext else "; may be a framework/library call"))
             return
         # explicit receiver
+        if pf.language == "python":
+            for imp in pf.imports:
+                imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
+                if imp.module and (recv == imp.path or recv == imported_name):
+                    module = imp.path
+                elif not imp.module and imp.path in self.pkg_nodes and recv == imported_name:
+                    module = imp.path
+                else:
+                    continue
+                imported_type = self.index.resolve_type(
+                    f"{module}.{c.name}", self.index.context(pf, owner.chain() if owner else []))
+                if imported_type.info is not None and c.name[:1].isupper():
+                    constructors = [m for m in imported_type.info.methods
+                                    if m.decl.kind == "constructor"]
+                    chosen, st = pick(constructors)
+                    if chosen:
+                        emit_targets(chosen, st,
+                                     f"constructor of {imported_type.info.fqn} via import {imp.path}")
+                    self.edge("USES", source.id, imported_type.info.node.id,
+                              status=imported_type.status,
+                              provenance=f"instantiation via imported module {imp.path}",
+                              file_path=pf.path, line=c.line)
+                    return
+                cands = self.index.functions.get(f"{module}.{c.name}", [])
+                chosen, st = pick(cands)
+                if chosen:
+                    emit_targets(chosen, st, f"module function via import {imp.path}")
+                    return
+                unresolved(f"function `{c.name}` not declared in imported module {module}")
+                return
         parts = recv.split(".")
         if parts[0] == "this" and len(parts) == 2:
             tn, fctx = var_type(parts[1])

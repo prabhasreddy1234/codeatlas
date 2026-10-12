@@ -1,6 +1,6 @@
 import { Lock, Network } from "lucide-react";
 import type { Me } from "../types/graph";
-import { AndroidLogo, GithubLogo, JavaLogo, KotlinLogo } from "../graph/style";
+import { AndroidLogo, GithubLogo, JavaLogo, KotlinLogo, PythonLogo } from "../graph/style";
 
 const ERRORS: Record<string, string> = {
   access_denied: "GitHub authorization was cancelled.",
@@ -16,8 +16,8 @@ export default function ConnectPage({ me }: { me: Me | null }) {
       <div className="connect-card">
         <Network size={44} color="#3ddc84" />
         <h1>CodeAtlas</h1>
-        <p>Deterministic code graphs for Android projects. Kotlin and Java are parsed with Tree-sitter — no LLM, no AI APIs.</p>
-        <div className="logos"><AndroidLogo size={26} /><KotlinLogo size={26} /><JavaLogo size={26} /></div>
+        <p>Deterministic code graphs for Python and Android projects. Python, Kotlin, and Java source are analyzed locally — no LLM or AI APIs.</p>
+        <div className="logos"><PythonLogo size={26} /><AndroidLogo size={26} /><KotlinLogo size={26} /><JavaLogo size={26} /></div>
         {err && <div className="alert error">{ERRORS[err] ?? "Authentication failed."}</div>}
         {me && !me.oauth_configured && (
           <div className="alert error">GitHub OAuth is not configured on the backend. Add GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET to .env (see README).</div>

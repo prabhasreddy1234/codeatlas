@@ -3,7 +3,7 @@ import {
   AtSign, Box, Cable, Cog, Database, FileCode, FolderGit2, Hammer, LayoutTemplate, ListOrdered,
   Package, Plug, Radio, SquareFunction, Timer, Warehouse, Layers, Cuboid,
 } from "lucide-react";
-import { siAndroid, siGithub, siJetpackcompose, siKotlin, siOpenjdk } from "simple-icons";
+import { siAndroid, siGithub, siJetpackcompose, siKotlin, siOpenjdk, siPython } from "simple-icons";
 import type { EdgeType, GNode } from "../types/graph";
 
 export type IconProps = { size?: number; color?: string };
@@ -22,6 +22,7 @@ export const AndroidLogo = brand(siAndroid);
 export const ComposeLogo = brand(siJetpackcompose);
 export const KotlinLogo = brand(siKotlin);
 export const JavaLogo = brand(siOpenjdk);
+export const PythonLogo = brand(siPython);
 
 type Lucide = ComponentType<{ size?: number; color?: string }>;
 const lucide = (I: Lucide) => ({ size = 18, color }: IconProps) => <I size={size} color={color} />;
@@ -67,7 +68,9 @@ export function typeLabel(n: GNode): string {
 }
 
 export const LanguageLogo = ({ lang, size = 12 }: { lang?: string | null; size?: number }) =>
-  lang === "kotlin" ? <KotlinLogo size={size} /> : lang === "java" ? <JavaLogo size={size} /> : null;
+  lang === "kotlin" ? <KotlinLogo size={size} />
+    : lang === "java" ? <JavaLogo size={size} />
+      : lang === "python" ? <PythonLogo size={size} /> : null;
 
 export const EDGE_STYLE: Record<EdgeType, { color: string; label: string; dash?: string }> = {
   CONTAINS: { color: "#475569", label: "Contains" },

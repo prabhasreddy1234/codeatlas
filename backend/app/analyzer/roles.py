@@ -20,6 +20,8 @@ ANNOTATION_ROLES = {
 
 
 def classify(info: TypeInfo, index: SymbolIndex) -> tuple[list[str], dict[str, str]]:
+    if info.pf.language != "kotlin" and info.pf.language != "java":
+        return [], {}
     roles: dict[str, str] = {}
     for t in index.hierarchy(info):
         prefix = "" if t is info else f"{t.decl.name} -> "

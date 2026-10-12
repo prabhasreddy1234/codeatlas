@@ -12,6 +12,7 @@ class ImportDecl:
     alias: Optional[str] = None
     static: bool = False
     line: int = 0
+    module: bool = False
 
 
 @dataclass
@@ -98,5 +99,6 @@ class ParsedFile:
     imports: list[ImportDecl] = field(default_factory=list)
     types: list[TypeDecl] = field(default_factory=list)
     functions: list[FuncDecl] = field(default_factory=list)
+    calls: list[CallSite] = field(default_factory=list)
     line_count: int = 0
     has_errors: bool = False

@@ -5,9 +5,13 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-IGNORED_DIRS = {".git", "build", ".gradle", "node_modules", ".idea", ".cxx", "generated",
-                "intermediates", ".svn", ".hg", "out", "__pycache__", ".dart_tool"}
-SOURCE_EXT = {".kt": "kotlin", ".java": "java"}
+IGNORED_DIRS = {
+    ".git", ".gradle", ".idea", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    ".svn", ".tox", ".venv", ".hg", "__pycache__", ".cxx", ".dart_tool",
+    "build", "dist", "env", "generated", "intermediates", "node_modules", "out",
+    "site-packages", "venv", "__pypackages__",
+}
+SOURCE_EXT = {".kt": "kotlin", ".java": "java", ".py": "python"}
 LAYOUT_RE = re.compile(r"(^|/)res/layout[^/]*/[^/]+\.xml$")
 NAV_RE = re.compile(r"(^|/)res/navigation[^/]*/[^/]+\.xml$")
 

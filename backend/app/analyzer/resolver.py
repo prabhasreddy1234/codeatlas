@@ -21,6 +21,9 @@ BUILTINS = {
     "Deprecated", "Suppress", "JvmStatic", "JvmField", "JvmOverloads", "Comparable",
     "CharSequence", "StringBuilder", "Class", "Math", "System", "Thread", "Lazy",
     "SuppressWarnings", "FunctionalInterface", "SafeVarargs", "IntArray", "Triple",
+    "bool", "bytes", "bytearray", "complex", "dict", "enumerate", "filter", "float",
+    "frozenset", "int", "list", "map", "memoryview", "object", "range", "set",
+    "slice", "str", "super", "tuple", "type", "zip", "None",
 }
 
 
@@ -112,7 +115,11 @@ class SymbolIndex:
             if imp.wildcard:
                 wild.append(imp.path)
             else:
-                explicit[imp.alias or imp.path.rsplit(".", 1)[-1]] = imp.path
+                if imp.module and not imp.alias:
+                    binding = imp.path.split(".", 1)[0]
+                    explicit[binding] = binding
+                else:
+                    explicit[imp.alias or imp.path.rsplit(".", 1)[-1]] = imp.path
         return FileContext(pf, explicit, wild, enclosing)
 
     def resolve_type(self, name: str, ctx: FileContext) -> Resolved:

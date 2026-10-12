@@ -70,7 +70,7 @@ export default function Inspector({ details, loading, onClose, onExpand, onMembe
         {n.file_path && (<><dt>Source</dt><dd className="mono">{n.file_path}{n.start_line ? `:${n.start_line}${n.end_line && n.end_line !== n.start_line ? `-${n.end_line}` : ""}` : ""}</dd></>)}
         {n.annotations.length > 0 && (<><dt>Annotations</dt><dd>{n.annotations.map((a) => `@${a}`).join(" ")}</dd></>)}
         {n.modifiers.length > 0 && (<><dt>Modifiers</dt><dd>{n.modifiers.join(" ")}</dd></>)}
-        {n.roles.length > 0 && (<><dt>Android role evidence</dt><dd>{n.roles.map((r) => (<div key={r}><b>{r}</b>: {n.role_evidence[r]}</div>))}</dd></>)}
+        {n.roles.length > 0 && (<><dt>Role evidence</dt><dd>{n.roles.map((r) => (<div key={r}><b>{r}</b>: {n.role_evidence[r]}</div>))}</dd></>)}
         {details.parent && (<><dt>Contained in</dt><dd><button className="link" onClick={() => onSelect(details.parent!.id)}>{details.parent.name}</button></dd></>)}
       </dl>
       <div className="actions">
