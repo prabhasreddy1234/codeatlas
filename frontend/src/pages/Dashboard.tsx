@@ -1,0 +1,288 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactFlowProvider } from "@xyflow/react";
+import { ArrowLeftRight, ArrowDownUp, Search } from "lucide-react";
+import { api, ApiError } from "../api/client";
+import type { Branch, EdgeType, GEdge, GNode, GraphMeta, JobStatus, NodeDetails, Repo } from "../types/graph";
+import type { Direction } from "../graph/layout";
+import { ALL_EDGE_TYPES, DEFAULT_EDGE_TYPES, EDGE_STYLE, NODE_FILTERS } from "../graph/style";
+import RepoPanel from "../components/RepoPanel";
+import GraphCanvas from "../components/GraphCanvas";
+import Inspector from "../components/Inspector";
+import Legend from "../components/Legend";
+
+const msg = (e: unknown) => (e instanceof ApiError ? e.message : "Unexpected error");
+
+interface Props { onSelection: (repo?: string, branch?: string) => void }
+
+export default function Dashboard({ onSelection }: Props) {
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [reposLoading, setReposLoading] = useState(true);
+  const [repo, setRepo] = useState<Repo | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branch, setBranch] = useState<Branch | null>(null);
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [meta, setMeta] = useState<GraphMeta | null>(null);
+  const [nodes, setNodes] = useState<Map<string, GNode>>(new Map());
+  const [edges, setEdges] = useState<Map<string, GEdge>>(new Map());
+  const [focus, setFocus] = useState<Set<string> | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [details, setDetails] = useState<NodeDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [direction, setDirection] = useState<Direction>("LR");
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set(NODE_FILTERS));
+  const [edgeFilter, setEdgeFilter] = useState<Set<EdgeType>>(new Set(DEFAULT_EDGE_TYPES));
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GNode[]>([]);
+  const [matchIds, setMatchIds] = useState<Set<string>>(new Set());
+  const [showLegend, setShowLegend] = useState(false);
+  const poll = useRef<number | null>(null);
+
+  const owner = repo?.owner;
+  const name = repo?.name;
+  const br = branch?.name;
+
+  useEffect(() => {
+    api.repos().then(setRepos).catch((e) => setError(msg(e))).finally(() => setReposLoading(false));
+    return () => { if (poll.current) window.clearTimeout(poll.current); };
+  }, []);
+
+  useEffect(() => { onSelection(repo?.full_name, branch?.name); }, [repo, branch, onSelection]);
+
+  const resetGraph = () => {
+    setMeta(null); setNodes(new Map()); setEdges(new Map()); setFocus(null);
+    setSelectedId(null); setDetails(null); setResults([]); setMatchIds(new Set()); setQuery("");
+  };
+
+  const pickRepo = (r: Repo) => {
+    setRepo(r); setBranch(null); setBranches([]); setJob(null); setError(null); resetGraph();
+    if (poll.current) window.clearTimeout(poll.current);
+    setBranchesLoading(true);
+    api.branches(r.owner, r.name)
+      .then((bs) => {
+        setBranches(bs);
+        setBranch(bs.find((b) => b.name === r.default_branch) ?? bs[0] ?? null);
+      })
+      .catch((e) => setError(msg(e)))
+      .finally(() => setBranchesLoading(false));
+  };
+
+  const loadGraph = useCallback(async (o: string, n: string, b: string) => {
+    const g = await api.graph(o, n, b);
+    setMeta(g);
+    setNodes(new Map(g.overview.nodes.map((x) => [x.id, x])));
+    setEdges(new Map(g.overview.edges.map((x) => [x.id, x])));
+    setFocus(null); setSelectedId(null); setDetails(null);
+  }, []);
+
+  const watch = useCallback((o: string, n: string, b: string) => {
+    const tick = async () => {
+      try {
+        const s = await api.status(o, n, b);
+        setJob(s);
+        if (s.state === "ready") { await loadGraph(o, n, b); setBusy(false); return; }
+        if (s.state === "failed") { setBusy(false); return; }
+        poll.current = window.setTimeout(tick, 700);
+      } catch (e) { setError(msg(e)); setBusy(false); }
+    };
+    tick();
+  }, [loadGraph]);
+
+  const generate = async (force: boolean) => {
+    if (!owner || !name || !br) return;
+    setError(null); setBusy(true); resetGraph();
+    if (poll.current) window.clearTimeout(poll.current);
+    try {
+      const s = await api.generate(owner, name, br, force);
+      setJob(s);
+      if (s.state === "ready") { await loadGraph(owner, name, br); setBusy(false); }
+      else if (s.state === "failed") setBusy(false);
+      else watch(owner, name, br);
+    } catch (e) { setError(msg(e)); setBusy(false); }
+  };
+
+  const merge = (chunk: { nodes: GNode[]; edges: GEdge[] }) => {
+    setNodes((m) => { const c = new Map(m); chunk.nodes.forEach((x) => c.set(x.id, x)); return c; });
+    setEdges((m) => { const c = new Map(m); chunk.edges.forEach((x) => c.set(x.id, x)); return c; });
+  };
+
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+    if (!id || !owner || !name || !br) { setDetails(null); return; }
+    setDetailsLoading(true);
+    api.node(owner, name, br, id).then(setDetails).catch((e) => setError(msg(e))).finally(() => setDetailsLoading(false));
+  }, [owner, name, br]);
+
+  const expand = async (id: string, direction: "in" | "out" | "both", members = false) => {
+    if (!owner || !name || !br) return;
+    try {
+      const chunk = await api.neighbors(owner, name, br, id, { direction, depth: 1, members });
+      merge(chunk);
+      setFocus((f) => (f ? new Set([...f, id, ...chunk.nodes.map((n) => n.id)]) : f));
+    } catch (e) { setError(msg(e)); }
+  };
+
+  const hideUnrelated = async (id: string) => {
+    if (!owner || !name || !br) return;
+    try {
+      const chunk = await api.neighbors(owner, name, br, id, { direction: "both", depth: 1 });
+      merge(chunk);
+      setFocus(new Set([id, ...chunk.nodes.map((n) => n.id)]));
+    } catch (e) { setError(msg(e)); }
+  };
+
+  const runSearch = async () => {
+    if (!owner || !name || !br || !query.trim()) { setResults([]); setMatchIds(new Set()); return; }
+    try {
+      const r = await api.search(owner, name, br, query.trim());
+      setResults(r); setMatchIds(new Set(r.map((x) => x.id)));
+    } catch (e) { setError(msg(e)); }
+  };
+
+  const showResult = async (n: GNode) => {
+    merge({ nodes: [n], edges: [] });
+    setResults([]);
+    await expand(n.id, "both");
+    select(n.id);
+  };
+
+  const backToOverview = () => {
+    if (!meta) return;
+    setNodes(new Map(meta.overview.nodes.map((x) => [x.id, x])));
+    setEdges(new Map(meta.overview.edges.map((x) => [x.id, x])));
+    setFocus(null); setSelectedId(null); setDetails(null); setMatchIds(new Set());
+  };
+
+  const toggle = <T,>(set: Set<T>, v: T, apply: (s: Set<T>) => void) => {
+    const c = new Set(set);
+    if (c.has(v)) c.delete(v); else c.add(v);
+    apply(c);
+  };
+
+  const visNodes = useMemo(
+    () => [...nodes.values()].filter((n) => (typeFilter.has(n.type) || n.type === "repository") && (!focus || focus.has(n.id))),
+    [nodes, typeFilter, focus],
+  );
+  const visEdges = useMemo(() => {
+    const ids = new Set(visNodes.map((n) => n.id));
+    return [...edges.values()].filter((e) => edgeFilter.has(e.type) && e.target && ids.has(e.source) && ids.has(e.target));
+  }, [edges, edgeFilter, visNodes]);
+
+  return (
+    <div className="dash">
+      <div className="sidebar">
+        <RepoPanel
+          repos={repos} reposLoading={reposLoading} repo={repo} branches={branches}
+          branchesLoading={branchesLoading} branch={branch} job={job} error={error} busy={busy}
+          onRepo={pickRepo} onBranch={(b) => { setBranch(b); setJob(null); resetGraph(); }} onGenerate={generate}
+        />
+        {meta && (
+          <>
+            <div className="meta-box">
+              <div><b>Commit</b> <code>{meta.commit_sha.slice(0, 10)}</code></div>
+              <div><b>Indexed</b> {new Date(meta.indexed_at).toLocaleString()}</div>
+              <div><b>Source files</b> {meta.stats.source_files ?? 0} · <b>Nodes</b> {meta.stats.nodes ?? "?"} · <b>Edges</b> {meta.stats.edges ?? "?"}</div>
+              <div className="muted">Analyzer: {meta.analyzer.name} {meta.analyzer.version} · LLM used: no</div>
+              {meta.warnings.length > 0 && <details><summary>{meta.warnings.length} warning(s)</summary>{meta.warnings.slice(0, 20).map((w, i) => <div key={i} className="muted">{w}</div>)}</details>}
+            </div>
+            <div className="filters">
+              <h4>Node types</h4>
+              <div className="chips">
+                {NODE_FILTERS.map((t) => (
+                  <label key={t} className={`chip${typeFilter.has(t) ? " on" : ""}`}>
+                    <input type="checkbox" checked={typeFilter.has(t)} onChange={() => toggle(typeFilter, t, setTypeFilter)} />{t}
+                  </label>
+                ))}
+              </div>
+              <h4>Relationships</h4>
+              <div className="chips">
+                {ALL_EDGE_TYPES.map((t) => (
+                  <label key={t} className={`chip${edgeFilter.has(t) ? " on" : ""}`} style={edgeFilter.has(t) ? { borderColor: EDGE_STYLE[t].color } : undefined}>
+                    <input type="checkbox" checked={edgeFilter.has(t)} onChange={() => toggle(edgeFilter, t, setEdgeFilter)} />{EDGE_STYLE[t].label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+        <button className="ghost" onClick={() => setShowLegend((s) => !s)}>{showLegend ? "Hide" : "Show"} legend</button>
+        {showLegend && <Legend />}
+      </div>
+
+      <main className="workspace">
+        {meta ? (
+          <>
+            <div className="toolbar">
+              <div className="search">
+                <Search size={14} />
+                <input value={query} placeholder="Search class, interface, method or file…"
+                       onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSearch()} />
+                {results.length > 0 && (
+                  <div className="search-pop">
+                    {results.map((r) => (
+                      <div key={r.id} className="combo-item" onClick={() => showResult(r)}>
+                        <b>{r.name}</b> <span className="muted">{r.type} · {r.file_path}{r.start_line ? `:${r.start_line}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button className="ghost" onClick={() => setDirection((d) => (d === "LR" ? "TB" : "LR"))} title="Toggle layout direction">
+                {direction === "LR" ? <ArrowLeftRight size={14} /> : <ArrowDownUp size={14} />} {direction === "LR" ? "Left → right" : "Top → bottom"}
+              </button>
+              {focus && <button className="ghost" onClick={() => setFocus(null)}>Show all loaded nodes</button>}
+              <button className="ghost" onClick={backToOverview}>Overview</button>
+              <span className="muted">{visNodes.length} nodes · {visEdges.length} edges{meta.overview.truncated ? " · overview truncated to top entries" : ""}</span>
+            </div>
+            <div className="canvas">
+              {visNodes.length === 0 ? (
+                <div className="canvas-empty">
+                  <div>
+                    {meta.overview.nodes.length === 0 ? (
+                      <>
+                        <h2>No code graph to display</h2>
+                        <p>
+                          CodeAtlas currently graphs Kotlin and Java source files. This branch has{" "}
+                          {meta.stats.source_files ?? 0} supported source files.
+                        </p>
+                        {meta.warnings[0] && <p className="muted">{meta.warnings[0]}</p>}
+                        <p className="muted">Choose a branch or repository containing Kotlin or Java code, then generate the graph again.</p>
+                      </>
+                    ) : (
+                      <>
+                        <h2>No nodes match the current filters</h2>
+                        <p className="muted">Enable one or more node types in the sidebar to show the graph.</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <ReactFlowProvider>
+                  <GraphCanvas
+                    nodes={visNodes} edges={visEdges} selectedId={selectedId} matchIds={matchIds}
+                    direction={direction} onSelect={select} onReset={backToOverview}
+                  />
+                </ReactFlowProvider>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="placeholder">
+            <p>Select a repository and branch, then click <b>Generate Code Graph</b>.</p>
+          </div>
+        )}
+      </main>
+
+      {meta && (
+        <Inspector
+          details={details} loading={detailsLoading} onClose={() => select(null)}
+          onExpand={(id, d) => expand(id, d)} onMembers={(id) => expand(id, "both", true)}
+          onFocus={hideUnrelated} onSelect={(id) => { select(id); if (!nodes.has(id)) expand(id, "both"); }}
+        />
+      )}
+    </div>
+  );
+}
