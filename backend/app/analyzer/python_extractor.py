@@ -42,6 +42,33 @@ def _type_names(node: ast.AST | None) -> list[str]:
     return []
 
 
+def _annotation_names(node: ast.AST | None, depth: int = 0) -> list[str]:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        if depth >= 4:
+            return []
+        try:
+            expression = ast.parse(node.value, mode="eval").body
+        except SyntaxError:
+            return []
+        return _annotation_names(expression, depth + 1)
+    if isinstance(node, ast.Subscript):
+        names = _type_names(node.value)
+        if _expr_name(node.value).rsplit(".", 1)[-1] == "Literal":
+            if isinstance(node.slice, ast.Tuple):
+                return names + [name for arg in node.slice.elts
+                                if not (isinstance(arg, ast.Constant)
+                                        and isinstance(arg.value, str))
+                                for name in _annotation_names(arg, depth)]
+            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                return names
+        return names + _annotation_names(node.slice, depth)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return [name for element in node.elts for name in _annotation_names(element, depth)]
+    if isinstance(node, ast.BinOp):
+        return _annotation_names(node.left, depth) + _annotation_names(node.right, depth)
+    return _type_names(node)
+
+
 def _line(node: ast.AST) -> int:
     return getattr(node, "lineno", 1)
 
@@ -71,7 +98,7 @@ def _relative_module(current: str, module: str, level: int, is_package: bool) ->
 
 
 def _annotation_type(node: ast.AST | None) -> str | None:
-    names = _type_names(node)
+    names = _annotation_names(node)
     return next((name for name in names
                  if name.rsplit(".", 1)[-1] not in _TYPE_WRAPPERS
                  and name.rsplit(".", 1)[-1] not in _BUILTIN_TYPES), None)
@@ -161,12 +188,12 @@ class _BodyVisitor(ast.NodeVisitor):
             kind = "new" if receiver is None and name[:1].isupper() else "call"
             self.target.calls.append(CallSite(
                 name, receiver, _line(node), len(node.args) + len(node.keywords), kind))
-            if kind == "new":
+            if kind == "new" and not isinstance(self.target, ParsedFile):
                 self.target.type_uses.append(TypeUse(name, _line(node), "instantiation"))
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        names = _type_names(node.annotation)
+        names = _annotation_names(node.annotation)
         for name in names:
             self.target.type_uses.append(TypeUse(name, _line(node)))
         type_name = _annotation_type(node.annotation)
@@ -223,9 +250,9 @@ def _function(node: ast.FunctionDef | ast.AsyncFunctionDef,
     ret = _annotation_type(node.returns)
     fd = FuncDecl(node.name, kind, _line(node), _end_line(node), params, ret, annotations)
     for arg in all_args:
-        for name in _type_names(arg.annotation):
+        for name in _annotation_names(arg.annotation):
             fd.type_uses.append(TypeUse(name, _line(arg)))
-    for name in _type_names(node.returns):
+    for name in _annotation_names(node.returns):
         fd.type_uses.append(TypeUse(name, _line(node)))
     fd.type_uses.extend(TypeUse(name, _line(node), "annotation") for name in annotations)
     fields: list[FieldDecl] = []
@@ -238,7 +265,7 @@ def _function(node: ast.FunctionDef | ast.AsyncFunctionDef,
 def _class(node: ast.ClassDef) -> TypeDecl:
     td = TypeDecl("class", node.name, _line(node), _end_line(node))
     for base in node.bases:
-        name = _expr_name(base)
+        name = _expr_name(base.value if isinstance(base, ast.Subscript) else base)
         if name:
             td.supers.append(SuperRef(name, _line(base), True))
         for type_name in _type_names(base):

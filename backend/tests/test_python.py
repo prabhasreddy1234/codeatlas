@@ -90,6 +90,34 @@ class Service:
     assert service.methods[1].locals["names"] == "list"
 
 
+def test_python_generic_bases_and_forward_reference_annotations():
+    parsed = parse_python("src/shop/models.py", b"""
+from typing import Generic, Literal, TypeVar
+
+T = TypeVar("T")
+
+class Entity:
+    pass
+
+class Parent(Generic[T]):
+    pass
+
+class Child(Parent[Entity]):
+    def lookup(self, value: "Entity", values: list["Entity"],
+               label: Literal["Entity"]) -> "Entity":
+        pass
+""")
+
+    child = next(decl for decl in parsed.types if decl.name == "Child")
+    assert [super_ref.name for super_ref in child.supers] == ["Parent"]
+    assert [use.name for use in child.type_uses] == ["Parent", "Entity"]
+    lookup = child.methods[0]
+    assert [param.type_name for param in lookup.params] == ["Entity", "Entity", None]
+    assert lookup.return_type == "Entity"
+    assert [use.name for use in lookup.type_uses].count("Entity") == 3
+    assert any(call.name == "TypeVar" for call in parsed.calls)
+
+
 def test_resolver_module_imports_support_module_aliases():
     idx = SymbolIndex()
     pf = ParsedFile(path="pkg/models.py", language="python", package="pkg")
