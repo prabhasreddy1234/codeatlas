@@ -119,11 +119,8 @@ class SymbolIndex:
                     if imp.alias:
                         explicit[imp.alias] = imp.path
                     else:
-                        parts = imp.path.split(".")
-                        alias = ""
-                        for part in parts:
-                            alias = f"{alias}.{part}" if alias else part
-                            explicit.setdefault(part, alias)
+                        root = imp.path.split(".", 1)[0]
+                        explicit.setdefault(root, root)
                     continue
                 explicit[imp.alias or imp.path.rsplit(".", 1)[-1]] = imp.path
         return FileContext(pf, explicit, wild, enclosing)
@@ -135,12 +132,12 @@ class SymbolIndex:
             r = self.provider.resolve_type(name, ctx)
             if r is not None:
                 return r
+        if name in self.types:
+            info = self.types[name]
+            return Resolved("confirmed", info.fqn, info, "fully-qualified name")
         segs = name.split(".")
         head, rest = segs[0], segs[1:]
         base = self._resolve_head(head, ctx)
-        if base.status == "unresolved" and rest and name in self.types:
-            info = self.types[name]
-            return Resolved("confirmed", info.fqn, info, "fully-qualified name")
         if rest and base.fqn:
             fqn = f"{base.fqn}.{'.'.join(rest)}"
             if fqn in self.types:
@@ -171,14 +168,24 @@ class SymbolIndex:
         cand = self.types.get(f"{pkg}.{head}" if pkg else head)
         if cand:
             return Resolved("confirmed", cand.fqn, cand, "same package")
-        for w in ctx.wildcards:
-            cand = self.types.get(f"{w}.{head}")
-            if cand:
-                return Resolved("confirmed", cand.fqn, cand, f"wildcard import {w}.*")
+        wildcard_matches = {
+            candidate.fqn: candidate
+            for w in ctx.wildcards
+            if (candidate := self.types.get(f"{w}.{head}")) is not None
+        }
+        if len(wildcard_matches) == 1:
+            candidate = next(iter(wildcard_matches.values()))
+            return Resolved("confirmed", candidate.fqn, candidate, "wildcard import")
+        if len(wildcard_matches) > 1:
+            return Resolved("unresolved", provenance=(
+                f"ambiguous simple name '{head}' in wildcard imports"))
         if head in BUILTINS:
             return Resolved("external", f"<builtin>.{head}", None, "language/standard library")
         if head in self.types:
             return Resolved("confirmed", head, self.types[head], "fully-qualified name")
+        if ctx.wildcards:
+            return Resolved("unresolved", provenance=(
+                f"'{head}' was not found in wildcard imports {', '.join(ctx.wildcards[:3])}.*"))
         same = self.by_simple.get(head, [])
         if len(same) == 1:
             return Resolved("inferred", same[0].fqn, same[0],
@@ -186,10 +193,6 @@ class SymbolIndex:
         if len(same) > 1:
             return Resolved("unresolved", None, None,
                             f"ambiguous simple name '{head}' ({len(same)} declarations, no import)")
-        ext_wild = [w for w in ctx.wildcards if w not in self.packages]
-        if ext_wild:
-            return Resolved("unresolved", None, None,
-                            f"'{head}' may come from wildcard import {', '.join(ext_wild[:3])}.*")
         return Resolved("unresolved", None, None, f"no declaration or import found for '{head}'")
 
     # ---- hierarchy -------------------------------------------------------

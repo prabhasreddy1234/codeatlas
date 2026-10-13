@@ -99,13 +99,54 @@ def test_resolver_module_imports_support_module_aliases():
         path="pkg/service.py",
         language="python",
         package="pkg",
-        imports=[ImportDecl("pkg.models", line=1, module=True)],
+        imports=[ImportDecl("pkg.models", alias="models", line=1, module=True)],
     )
 
     resolved = idx.resolve_type("models.Store", idx.context(file_pf, []))
 
     assert resolved.info is info
     assert resolved.status == "confirmed"
+
+
+def test_resolver_python_dotted_module_import_binds_only_top_level_name():
+    idx = SymbolIndex()
+    pf = ParsedFile(path="pkg/models.py", language="python", package="pkg")
+    info = TypeInfo(SimpleNamespace(id="type-store"), TypeDecl("class", "Store", 1, 2), pf, "pkg.models.Store")
+    idx.add_type(info)
+    file_pf = ParsedFile(
+        path="pkg/service.py",
+        language="python",
+        package="pkg",
+        imports=[ImportDecl("pkg.models", line=1, module=True)],
+    )
+    context = idx.context(file_pf, [])
+
+    assert idx.resolve_type("pkg.models.Store", context).info is info
+    assert idx.resolve_type("models.Store", context).status == "unresolved"
+
+
+def test_resolver_does_not_guess_through_ambiguous_or_unmatched_wildcards():
+    idx = SymbolIndex()
+    first_pf = ParsedFile(path="one/models.py", language="python", package="one.models")
+    second_pf = ParsedFile(path="two/models.py", language="python", package="two.models")
+    first = TypeInfo(SimpleNamespace(id="type-first"), TypeDecl("class", "Store", 1, 2),
+                     first_pf, "one.models.Store")
+    second = TypeInfo(SimpleNamespace(id="type-second"), TypeDecl("class", "Store", 1, 2),
+                      second_pf, "two.models.Store")
+    idx.add_type(first)
+    idx.add_type(second)
+
+    ambiguous = idx.context(ParsedFile(
+        path="service.py", language="python", imports=[
+            ImportDecl("one.models", wildcard=True),
+            ImportDecl("two.models", wildcard=True),
+        ]), [])
+    assert idx.resolve_type("Store", ambiguous).status == "unresolved"
+
+    unrelated = idx.context(ParsedFile(
+        path="service.py", language="python",
+        imports=[ImportDecl("external.models", wildcard=True)]), [])
+    assert idx.resolve_type("Store", unrelated).status == "unresolved"
 
 
 def test_python_syntax_errors_are_reported():
