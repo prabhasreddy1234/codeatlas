@@ -62,6 +62,30 @@ def test_python_repository_graph_resolves_imports_and_calls(tmp_path):
     assert ("CALLS", "shop.service.main", "shop.service.Service.run") in edges
 
 
+def test_python_literal_and_unpacking_inference():
+    parsed = parse_python("src/shop/service.py", b"""
+class Service:
+    def __init__(self):
+        self.items = []
+        self.meta = {"key": "value"}
+        self.values = [1, 2]
+        self.label = "ok"
+
+    def run(self, payload):
+        names = list(payload)
+        first = names[0]
+        return first
+""")
+
+    service = parsed.types[0]
+    fields = {field.name: field.type_name for field in service.fields}
+    assert fields["items"] == "list"
+    assert fields["meta"] == "dict"
+    assert fields["values"] == "list"
+    assert fields["label"] == "str"
+    assert service.methods[1].locals["names"] == "list"
+
+
 def test_python_syntax_errors_are_reported():
     parsed = parse_python("broken.py", b"def broken(:\n")
 

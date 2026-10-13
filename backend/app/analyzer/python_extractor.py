@@ -12,6 +12,10 @@ _BUILTIN_TYPES = {
     "bool", "bytes", "complex", "dict", "float", "frozenset", "int", "list",
     "memoryview", "object", "set", "str", "tuple", "type",
 }
+_BUILTIN_FACTORIES = {
+    "list", "dict", "set", "tuple", "frozenset", "deque", "defaultdict",
+    "OrderedDict", "Counter",
+}
 
 
 def _expr_name(node: ast.AST | None) -> str:
@@ -71,6 +75,44 @@ def _annotation_type(node: ast.AST | None) -> str | None:
     return next((name for name in names
                  if name.rsplit(".", 1)[-1] not in _TYPE_WRAPPERS
                  and name.rsplit(".", 1)[-1] not in _BUILTIN_TYPES), None)
+
+
+def _literal_type(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant):
+        if node.value is None:
+            return "None"
+        if isinstance(node.value, bool):
+            return "bool"
+        if isinstance(node.value, int):
+            return "int"
+        if isinstance(node.value, float):
+            return "float"
+        if isinstance(node.value, complex):
+            return "complex"
+        if isinstance(node.value, str):
+            return "str"
+        if isinstance(node.value, bytes):
+            return "bytes"
+        return None
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return "list" if isinstance(node, ast.List) else "tuple"
+    if isinstance(node, ast.Set):
+        return "set"
+    if isinstance(node, ast.Dict):
+        return "dict"
+    if isinstance(node, ast.Call):
+        callable_ = node.func
+        if isinstance(callable_, ast.Name):
+            name = callable_.id
+            if name in _BUILTIN_FACTORIES:
+                return name
+            if name[:1].isupper():
+                return name
+        elif isinstance(callable_, ast.Attribute):
+            name = callable_.attr
+            if name in _BUILTIN_FACTORIES:
+                return name
+    return None
 
 
 def _receiver(node: ast.AST) -> str:
@@ -143,6 +185,13 @@ class _BodyVisitor(ast.NodeVisitor):
         self.visit(node.value)
 
     def _record_assignment(self, target: ast.AST, type_name: str | None, line: int) -> None:
+        if isinstance(target, (ast.Tuple, ast.List)):
+            for elt in target.elts:
+                self._record_assignment(elt, type_name, line)
+            return
+        if isinstance(target, ast.Starred):
+            self._record_assignment(target.value, type_name, line)
+            return
         if isinstance(target, ast.Name) and isinstance(self.target, FuncDecl) and type_name:
             self.target.locals[target.id] = type_name
         if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) \
@@ -151,9 +200,10 @@ class _BodyVisitor(ast.NodeVisitor):
 
     @staticmethod
     def _called_type(value: ast.AST | None) -> str | None:
-        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) \
-                and value.func.id[:1].isupper():
-            return value.func.id
+        if value is None:
+            return None
+        if isinstance(value, ast.AST):
+            return _literal_type(value)
         return None
 
 
