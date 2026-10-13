@@ -59,18 +59,28 @@ export default function GraphCanvas({ nodes, edges, selectedId, matchIds, direct
         data: { type: e.type },
         markerEnd: { type: MarkerType.ArrowClosed, color: st.color, width: 16, height: 16 },
         style: { stroke: st.color, strokeWidth: active ? 1.8 : 1, strokeDasharray: dashed, opacity: active ? 0.95 : 0.2 },
-        labelStyle: { fontSize: 10, fill: "#cbd5e1" },
-        labelBgStyle: { fill: "#0f172a" },
+        labelStyle: { fontSize: 10, fill: "#e2e8f0", fontWeight: 600 },
+        labelBgStyle: { fill: "rgba(15, 23, 42, 0.9)", stroke: "rgba(148, 163, 184, 0.2)", strokeWidth: 1 },
+        labelBgPadding: [6, 4],
       } as Edge;
     });
   }, [edges, nodes, selectedId]);
 
   const key = useMemo(() => nodes.map((n) => n.id).join(",") + direction, [nodes, direction]);
   useEffect(() => {
-    const t = setTimeout(() => rf.fitView({ padding: 0.2, duration: 300, maxZoom: 1.1 }), 60);
+    const t = setTimeout(() => {
+      if (selectedId) {
+        const node = rf.getNode(selectedId);
+        if (node) {
+          rf.fitView({ nodes: [node], padding: 0.5, duration: 350, maxZoom: 1.4 });
+          return;
+        }
+      }
+      rf.fitView({ padding: 0.2, duration: 300, maxZoom: 1.1 });
+    }, 80);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, selectedId]);
 
   return (
     <ReactFlow
