@@ -1,5 +1,9 @@
+from types import SimpleNamespace
+
+from app.analyzer.model import ImportDecl, ParsedFile, TypeDecl
 from app.analyzer.pipeline import analyze_repository
 from app.analyzer.python_extractor import parse_python
+from app.analyzer.resolver import SymbolIndex, TypeInfo
 
 
 def test_python_extraction_handles_declarations_imports_and_async():
@@ -84,6 +88,24 @@ class Service:
     assert fields["values"] == "list"
     assert fields["label"] == "str"
     assert service.methods[1].locals["names"] == "list"
+
+
+def test_resolver_module_imports_support_module_aliases():
+    idx = SymbolIndex()
+    pf = ParsedFile(path="pkg/models.py", language="python", package="pkg")
+    info = TypeInfo(SimpleNamespace(id="type-store"), TypeDecl("class", "Store", 1, 2), pf, "pkg.models.Store")
+    idx.add_type(info)
+    file_pf = ParsedFile(
+        path="pkg/service.py",
+        language="python",
+        package="pkg",
+        imports=[ImportDecl("pkg.models", line=1, module=True)],
+    )
+
+    resolved = idx.resolve_type("models.Store", idx.context(file_pf, []))
+
+    assert resolved.info is info
+    assert resolved.status == "confirmed"
 
 
 def test_python_syntax_errors_are_reported():

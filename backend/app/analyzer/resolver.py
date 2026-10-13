@@ -115,11 +115,17 @@ class SymbolIndex:
             if imp.wildcard:
                 wild.append(imp.path)
             else:
-                if imp.module and not imp.alias:
-                    binding = imp.path.split(".", 1)[0]
-                    explicit[binding] = binding
-                else:
-                    explicit[imp.alias or imp.path.rsplit(".", 1)[-1]] = imp.path
+                if imp.module:
+                    if imp.alias:
+                        explicit[imp.alias] = imp.path
+                    else:
+                        parts = imp.path.split(".")
+                        alias = ""
+                        for part in parts:
+                            alias = f"{alias}.{part}" if alias else part
+                            explicit.setdefault(part, alias)
+                    continue
+                explicit[imp.alias or imp.path.rsplit(".", 1)[-1]] = imp.path
         return FileContext(pf, explicit, wild, enclosing)
 
     def resolve_type(self, name: str, ctx: FileContext) -> Resolved:
@@ -135,6 +141,11 @@ class SymbolIndex:
         if base.status == "unresolved" and rest and name in self.types:
             info = self.types[name]
             return Resolved("confirmed", info.fqn, info, "fully-qualified name")
+        if rest and base.fqn:
+            fqn = f"{base.fqn}.{'.'.join(rest)}"
+            if fqn in self.types:
+                status = "confirmed" if base.status == "external" else base.status
+                return Resolved(status, fqn, self.types[fqn], base.provenance + " + nested")
         if not rest or base.status in ("unresolved",):
             return base
         fqn = f"{base.fqn}.{'.'.join(rest)}"
