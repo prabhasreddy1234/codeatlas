@@ -7,6 +7,7 @@ from pathlib import PurePosixPath
 from .model import (CallSite, FieldDecl, FuncDecl, ImportDecl, Param, ParsedFile,
                     SuperRef, TypeDecl, TypeUse)
 
+
 _TYPE_WRAPPERS = {"Annotated", "ClassVar", "Final", "Literal", "Optional", "Union"}
 _BUILTIN_TYPES = {
     "bool", "bytes", "complex", "dict", "float", "frozenset", "int", "list",
