@@ -23,9 +23,9 @@ export default function ConnectPage({ me }: { me: Me | null }) {
           <div className="alert error">GitHub OAuth is not configured on the backend. Add GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET to .env (see README).</div>
         )}
         <a className="btn primary" href="/auth/github"><GithubLogo size={16} color="currentColor" /> Connect GitHub</a>
-        <small>Requests no scopes: public repositories only.</small>
+        <small>Requests no scopes and lists public repositories only.</small>
         <a className="btn" href="/auth/github?private=true"><Lock size={16} /> Connect with private repository access</a>
-        <small>Requests GitHub's <code>repo</code> scope — the narrowest scope OAuth Apps offer for private repos. Read-only usage; the token stays on the server.</small>
+        <small>Requests GitHub's <code>repo</code> scope and lists private repositories only. Read-only usage; the token stays on the server.</small>
       </div>
     </div>
   );

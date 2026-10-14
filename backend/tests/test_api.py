@@ -26,6 +26,17 @@ def test_unauthenticated_requests(app):
     assert r.status_code == 401 and r.json()["error"]["code"] == "not_authenticated"
 
 
+def test_repository_visibility_matches_connection_scope(client):
+    private_repos = client.get("/api/github/repos").json()["repositories"]
+    assert private_repos and all(repo["private"] for repo in private_repos)
+
+    session = client.app.state.sessions.create(
+        "public-token", {"login": "octo", "name": "Octo", "avatar_url": ""}, "")
+    client.cookies.set("codeatlas_session", session.id)
+    public_repos = client.get("/api/github/repos").json()["repositories"]
+    assert public_repos and all(not repo["private"] for repo in public_repos)
+
+
 def test_me_hides_token(client):
     body = client.get("/api/auth/me").json()
     assert body["user"]["login"] == "octo" and body["private_access"] is True
@@ -64,7 +75,8 @@ def test_oauth_not_configured(tmp_path):
 
 
 def test_repos_and_branches(client):
-    assert client.get("/api/github/repos").json()["repositories"][0]["full_name"] == "acme/sample"
+    repos = client.get("/api/github/repos").json()["repositories"]
+    assert repos[0]["full_name"] == "acme/private-sample" and repos[0]["private"]
     assert client.get("/api/github/repos/acme/sample/branches").json()["branches"][0]["name"] == "main"
     assert client.get("/api/github/repos/../x/branches").status_code in (400, 404)
 
@@ -78,7 +90,11 @@ def test_generate_and_cache(client, remote_repo):
     assert g["commit_sha"] == s["commit_sha"] and g["stats"]["nodes"] > 20
     assert g["analyzer"]["llm_used"] is False
     names = {n["name"] for n in g["overview"]["nodes"]}
-    assert "MainActivity" in names
+    assert "onCreate" in names
+    assert len(g["overview"]["levels"]) > 1
+    assert g["overview"]["entry_points"] > 0
+    assert len(g["overview"]["nodes"]) == g["overview"]["total_graph_nodes"] == g["stats"]["nodes"]
+    assert len(g["overview"]["edges"]) >= g["overview"]["total_graph_edges"] == g["stats"]["edges"]
     # unchanged commit: served from storage without re-indexing
     indexed_at = g["indexed_at"]
     again = gen(client).json()
@@ -86,11 +102,11 @@ def test_generate_and_cache(client, remote_repo):
     g2 = client.get("/api/graphs/acme/sample", params={"branch": "main"}).json()
     assert g2["indexed_at"] == indexed_at
     # node details + neighbors
-    nid = next(n["id"] for n in g["overview"]["nodes"] if n["name"] == "UserViewModel")
+    nid = next(n["id"] for n in g["overview"]["nodes"] if n["name"] == "refresh")
     d = client.get(f"/api/graphs/acme/sample/nodes/{nid}", params={"branch": "main"}).json()
-    assert d["node"]["file_path"].endswith("UserViewModel.kt") and d["node"]["start_line"] == 8
+    assert d["node"]["file_path"].endswith("UserViewModel.kt") and d["node"]["type"] == "function"
     nb = client.get(f"/api/graphs/acme/sample/neighbors/{nid}", params={"branch": "main", "direction": "in"}).json()
-    assert "MainActivity" in {n["name"] for n in nb["nodes"]}
+    assert "onCreate" in {n["name"] for n in nb["nodes"]}
     sr = client.get("/api/graphs/acme/sample/search", params={"branch": "main", "q": "fetchusers"}).json()
     assert any(x["name"] == "fetchUsers" for x in sr["results"])
     assert client.get("/api/graphs/acme/sample/export", params={"branch": "main"}).status_code == 200

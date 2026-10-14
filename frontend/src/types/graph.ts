@@ -18,6 +18,7 @@ export interface GNode {
   file_path?: string | null;
   start_line?: number | null;
   end_line?: number | null;
+  level?: number;
   language?: string | null;
   package?: string | null;
   parent_id?: string | null;
@@ -47,7 +48,11 @@ export interface GraphChunk {
   edges: GEdge[];
   truncated?: boolean;
   total_class_level_nodes?: number;
+  total_reachable_nodes?: number;
+  total_graph_nodes?: number;
+  total_graph_edges?: number;
   entry_points?: number;
+  levels?: { level: number; nodes: string[] }[];
 }
 
 export interface GraphMeta {

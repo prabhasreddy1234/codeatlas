@@ -6,6 +6,7 @@ interface Props {
   repos: Repo[];
   reposLoading: boolean;
   repo: Repo | null;
+  repoVisibility: "public" | "private";
   branches: Branch[];
   branchesLoading: boolean;
   branch: Branch | null;
@@ -22,7 +23,7 @@ export default function RepoPanel(p: Props) {
   return (
     <div className="repo-panel">
       <div className="field">
-        <label>Repository</label>
+        <label>{p.repoVisibility === "private" ? "Private repositories" : "Public repositories"}</label>
         <Combobox
           items={p.repos} value={p.repo} loading={p.reposLoading} placeholder="Select a repository"
           getKey={(r) => r.full_name} getText={(r) => r.full_name} onChange={p.onRepo}
@@ -33,6 +34,7 @@ export default function RepoPanel(p: Props) {
             </span>
           )}
         />
+        <small className="muted">Showing {p.repoVisibility} repositories only. To switch visibility, disconnect and reconnect with the other access option.</small>
       </div>
       <div className="field">
         <label>Branch</label>

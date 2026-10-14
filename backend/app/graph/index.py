@@ -1,15 +1,22 @@
 """In-memory query layer over a stored GraphDocument (overview, neighbors, search)."""
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Iterable, Optional
 
 from ..schemas.graph import GraphDocument, GraphEdge, GraphNode
 
 CLASS_LIKE = {"class", "interface", "object", "enum", "annotation"}
 LIFTED_TYPES = {"CALLS", "USES", "EXTENDS", "IMPLEMENTS", "INJECTS", "NAVIGATES_TO", "OVERRIDES"}
-ROLE_ORDER = ["activity", "fragment", "composable", "viewmodel", "repository", "dao",
-              "worker", "service", "receiver"]
+LIFECYCLE_ENTRIES = {
+    "activity": {"onCreate", "onStart", "onResume", "onNewIntent", "onActivityResult"},
+    "application": {"onCreate"},
+    "fragment": {"onAttach", "onCreate", "onCreateView", "onViewCreated", "onStart", "onResume"},
+    "provider": {"onCreate"},
+    "receiver": {"onReceive"},
+    "service": {"onCreate", "onStartCommand", "onBind", "onHandleIntent"},
+    "worker": {"doWork"},
+}
 
 
 class GraphIndex:
@@ -79,44 +86,190 @@ class GraphIndex:
         return d
 
     # ---- overview ------------------------------------------------------------
-    def overview(self, limit: int = 120) -> dict:
+    def overview(self, limit: Optional[int] = None) -> dict:
         lifted = self.lifted_edges()
-        adj: dict[str, set[str]] = defaultdict(set)
-        for e in lifted:
-            adj[e["source"]].add(e["target"])
-            adj[e["target"]].add(e["source"])
+
         def is_python_top_level_function(node: GraphNode) -> bool:
             parent = self.nodes.get(node.parent_id) if node.parent_id else None
             return (node.language == "python" and node.type in ("function", "constructor")
                     and parent is not None and parent.type == "file")
 
-        seeds = [n for n in self.doc.nodes
-                 if (n.roles and (n.type in CLASS_LIKE or "composable" in n.roles))
-                 or (n.language == "python" and (n.type in CLASS_LIKE or is_python_top_level_function(n)))]
-        seeds.sort(key=lambda n: (min((ROLE_ORDER.index(r) for r in n.roles if r in ROLE_ORDER), default=99),
-                                  n.qualified_name))
-        chosen: list[str] = [n.id for n in seeds]
-        if not chosen:
-            cands = [n for n in self.doc.nodes
-                     if n.type in CLASS_LIKE or is_python_top_level_function(n)]
-            cands.sort(key=lambda n: -len(adj.get(n.id, ())))
-            chosen = [n.id for n in cands]
-        chosen = chosen[:limit]
-        sel = set(chosen)
-        # add direct dependencies of the entry points until the limit is reached
-        for nid in list(chosen):
-            for e in lifted:
-                if len(sel) >= limit:
+        navigated_to = {e.target for e in self.doc.edges
+                        if e.type == "NAVIGATES_TO" and e.target}
+        entries = []
+        for node in self.doc.nodes:
+            if node.type not in ("function", "constructor"):
+                continue
+            parent = self.nodes.get(node.parent_id) if node.parent_id else None
+            if parent is not None and parent.id in navigated_to:
+                continue
+            is_lifecycle = parent is not None and any(
+                node.name in LIFECYCLE_ENTRIES.get(role, set()) for role in parent.roles)
+            is_java_main = (node.name == "main" and node.language == "java"
+                            and "static" in node.modifiers)
+            is_python_main = is_python_top_level_function(node) and node.name == "main"
+            if is_lifecycle or is_java_main or is_python_main:
+                entries.append(node)
+        entries.sort(key=lambda n: (n.qualified_name, n.file_path or "", n.start_line or 0))
+
+        fallback = not entries
+        if fallback:
+            candidates = [
+                n for n in self.doc.nodes
+                if (n.type in CLASS_LIKE and n.roles)
+                or "composable" in n.roles
+                or is_python_top_level_function(n)
+            ]
+            if not candidates:
+                candidates = [n for n in self.doc.nodes
+                              if n.type in CLASS_LIKE or is_python_top_level_function(n)]
+            incoming = {e["target"] for e in lifted}
+            entries = [n for n in candidates if n.id not in incoming]
+            if not entries:
+                degree: dict[str, int] = defaultdict(int)
+                for edge in lifted:
+                    degree[edge["source"]] += 1
+                    degree[edge["target"]] += 1
+                entries = sorted(candidates, key=lambda n: (-degree[n.id], n.qualified_name))[:1]
+            entries.sort(key=lambda n: (n.qualified_name, n.file_path or "", n.start_line or 0))
+
+        entry_ids = {n.id for n in entries}
+        flow_out: dict[str, list[dict]] = defaultdict(list)
+        if fallback:
+            for edge in lifted:
+                if edge["type"] != "USES":
+                    flow_out[edge["source"]].append(edge)
+        else:
+            overrides: dict[str, list[GraphEdge]] = defaultdict(list)
+            raw_out: dict[str, list[GraphEdge]] = defaultdict(list)
+            lifecycle_by_type: dict[str, list[GraphNode]] = defaultdict(list)
+            for edge in self.doc.edges:
+                if edge.target and edge.type == "OVERRIDES":
+                    overrides[edge.target].append(edge)
+                if edge.target and edge.type in ("CALLS", "NAVIGATES_TO"):
+                    raw_out[edge.source].append(edge)
+            for node in self.doc.nodes:
+                parent = self.nodes.get(node.parent_id) if node.parent_id else None
+                if (parent and node.type in ("function", "constructor")
+                        and any(node.name in LIFECYCLE_ENTRIES.get(role, set())
+                                for role in parent.roles)):
+                    lifecycle_by_type[parent.id].append(node)
+            for nodes in lifecycle_by_type.values():
+                nodes.sort(key=lambda n: (n.name, n.qualified_name, n.start_line or 0))
+
+            for source, source_edges in raw_out.items():
+                for edge in source_edges:
+                    if edge.type == "NAVIGATES_TO":
+                        destinations = lifecycle_by_type.get(edge.target, [])
+                        if destinations:
+                            for destination in destinations:
+                                flow_out[source].append({
+                                    **edge.model_dump(),
+                                    "id": f"overview:{edge.id}:{destination.id}",
+                                    "target": destination.id,
+                                    "provenance": (f"{edge.provenance}; enters "
+                                                   f"{destination.qualified_name}"),
+                                })
+                            continue
+                    flow_out[source].append(edge.model_dump())
+                    if edge.type == "CALLS":
+                        for override in overrides.get(edge.target, []):
+                            implementation = self.nodes[override.source]
+                            flow_out[source].append({
+                                **edge.model_dump(),
+                                "id": f"dispatch:{edge.id}:{override.source}",
+                                "target": override.source,
+                                "status": "inferred",
+                                "provenance": (f"runtime dispatch to override "
+                                               f"{implementation.qualified_name}"),
+                            })
+
+        levels: dict[str, int] = {}
+        queue: deque[str] = deque()
+        for node in entries:
+            levels[node.id] = 0
+            queue.append(node.id)
+        while queue:
+            source = queue.popleft()
+            for edge in flow_out.get(source, []):
+                target = edge["target"]
+                if target not in levels:
+                    levels[target] = levels[source] + 1
+                    queue.append(target)
+
+        grouped: dict[int, list[str]] = defaultdict(list)
+        for node_id, depth in levels.items():
+            grouped[depth].append(node_id)
+        for ids in grouped.values():
+            ids.sort(key=lambda nid: (self.nodes[nid].qualified_name,
+                                      self.nodes[nid].file_path or "",
+                                      self.nodes[nid].start_line or 0))
+
+        flow_node_count = len(levels)
+        last_flow_level = max(levels.values(), default=-1)
+        member_levels: dict[str, list[int]] = defaultdict(list)
+        for node in self.doc.nodes:
+            if node.type in ("function", "constructor") and node.id in levels:
+                owner_id = self.lift(node.id)
+                if owner_id and owner_id != node.id:
+                    member_levels[owner_id].append(levels[node.id])
+        for owner_id, depths in member_levels.items():
+            if owner_id in self.nodes and self.nodes[owner_id].type in CLASS_LIKE:
+                levels[owner_id] = min(depths)
+        for node in self.doc.nodes:
+            levels.setdefault(node.id, last_flow_level + 1)
+        selected = set(levels)
+        if limit is not None:
+            selected = set()
+            for depth in sorted(grouped):
+                remaining = limit - len(selected)
+                if remaining <= 0:
                     break
-                if e["source"] == nid and e["target"] not in sel and e["type"] != "USES":
-                    sel.add(e["target"])
-        edges = [e for e in lifted if e["source"] in sel and e["target"] in sel]
+                selected.update(grouped[depth][:remaining])
+
+        # Preserve every extracted relationship, including structural edges and
+        # unresolved references; append synthetic runtime-dispatch/navigation flows.
+        edge_data = {edge.id: edge.model_dump() for edge in self.doc.edges}
+        for source in levels:
+            for edge in flow_out.get(source, []):
+                if edge["id"] not in edge_data:
+                    edge_data[edge["id"]] = edge
         total_candidates = sum(
             1 for n in self.doc.nodes
             if n.type in CLASS_LIKE or "composable" in n.roles or is_python_top_level_function(n))
-        return {"nodes": [self.node_dict(self.nodes[i]) for i in sel], "edges": edges,
-                "total_class_level_nodes": total_candidates, "truncated": total_candidates > len(sel),
-                "entry_points": len(seeds)}
+        node_data = []
+        for node_id in selected:
+            data = self.node_dict(self.nodes[node_id])
+            data["level"] = levels[node_id]
+            if node_id in entry_ids:
+                data["roles"] = [*data["roles"], "entry_point"]
+                data["role_evidence"] = {
+                    **data["role_evidence"],
+                    "entry_point": "application entry method" if not fallback else "top-level graph root",
+                }
+            node_data.append(data)
+        node_data.sort(key=lambda n: (n["level"], n["qualified_name"], n["id"]))
+        all_grouped: dict[int, list[str]] = defaultdict(list)
+        for node_id in selected:
+            all_grouped[levels[node_id]].append(node_id)
+        layers = [
+            {"level": depth, "nodes": sorted(ids, key=lambda nid: (
+                self.nodes[nid].qualified_name, self.nodes[nid].id))}
+            for depth, ids in sorted(all_grouped.items())
+        ]
+        edges = sorted((edge for edge in edge_data.values()
+                        if edge["source"] in selected
+                        and (edge["target"] is None or edge["target"] in selected)),
+                       key=lambda edge: (levels[edge["source"]],
+                                         levels.get(edge["target"], -1),
+                                         edge["source"], edge["id"]))
+        return {"nodes": node_data, "edges": edges, "levels": layers,
+                "total_class_level_nodes": total_candidates,
+                "total_reachable_nodes": flow_node_count,
+                "total_graph_nodes": len(self.doc.nodes),
+                "total_graph_edges": len(self.doc.edges),
+                "truncated": len(self.doc.nodes) > len(selected),
+                "entry_points": len(entry_ids)}
 
     # ---- neighbors -------------------------------------------------------------
     def neighbors(self, node_id: str, direction: str = "both", depth: int = 1,

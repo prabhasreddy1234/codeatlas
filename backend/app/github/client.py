@@ -50,9 +50,12 @@ class GitHubClient:
     def get_user(self) -> dict:
         return self._get("/user")
 
-    def list_repos(self, max_items: int = 1000) -> list[dict]:
+    def list_repos(self, visibility: str, max_items: int = 1000) -> list[dict]:
+        if visibility not in ("public", "private"):
+            raise ValueError(f"Unsupported repository visibility: {visibility}")
         raw = self._paginate("/user/repos", {"sort": "updated",
-                                             "affiliation": "owner,collaborator,organization_member"}, max_items)
+                                             "affiliation": "owner,collaborator,organization_member",
+                                             "visibility": visibility}, max_items)
         return [{"id": r["id"], "name": r["name"], "owner": r["owner"]["login"],
                  "full_name": r["full_name"], "private": bool(r["private"]),
                  "visibility": r.get("visibility") or ("private" if r["private"] else "public"),

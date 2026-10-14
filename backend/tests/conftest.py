@@ -66,9 +66,14 @@ class FakeGitHub:
     def get_user(self):
         return {"login": "octo", "name": "Octo", "avatar_url": "x"}
 
-    def list_repos(self):
-        return [{"id": 1, "name": "sample", "owner": "acme", "full_name": "acme/sample", "private": False,
-                 "visibility": "public", "default_branch": "main"}]
+    def list_repos(self, visibility="public"):
+        repos = [
+            {"id": 1, "name": "sample", "owner": "acme", "full_name": "acme/sample", "private": False,
+             "visibility": "public", "default_branch": "main"},
+            {"id": 2, "name": "private-sample", "owner": "acme", "full_name": "acme/private-sample",
+             "private": True, "visibility": "private", "default_branch": "main"},
+        ]
+        return [repo for repo in repos if repo["visibility"] == visibility]
 
     def list_branches(self, owner, repo):
         return [{"name": "main", "commit_sha": "x", "protected": False}]

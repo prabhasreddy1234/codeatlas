@@ -43,6 +43,7 @@ export default function CodeNode({ data }: NodeProps<CodeFlowNode>) {
         </div>
         <div className="cn-meta">
           <span className="cn-type">{typeLabel(node)}</span>
+          {node.level !== undefined && <span className="cn-level">Level {node.level}</span>}
         </div>
         {context && <div className="cn-ctx">{context}</div>}
       </div>

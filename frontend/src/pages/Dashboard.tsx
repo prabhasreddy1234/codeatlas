@@ -12,9 +12,12 @@ import Legend from "../components/Legend";
 
 const msg = (e: unknown) => (e instanceof ApiError ? e.message : "Unexpected error");
 
-interface Props { onSelection: (repo?: string, branch?: string) => void }
+interface Props {
+  repoVisibility: "public" | "private";
+  onSelection: (repo?: string, branch?: string) => void;
+}
 
-export default function Dashboard({ onSelection }: Props) {
+export default function Dashboard({ repoVisibility, onSelection }: Props) {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [reposLoading, setReposLoading] = useState(true);
   const [repo, setRepo] = useState<Repo | null>(null);
@@ -175,7 +178,7 @@ export default function Dashboard({ onSelection }: Props) {
     <div className="dash">
       <div className="sidebar">
         <RepoPanel
-          repos={repos} reposLoading={reposLoading} repo={repo} branches={branches}
+          repos={repos} reposLoading={reposLoading} repo={repo} repoVisibility={repoVisibility} branches={branches}
           branchesLoading={branchesLoading} branch={branch} job={job} error={error} busy={busy}
           onRepo={pickRepo} onBranch={(b) => { setBranch(b); setJob(null); resetGraph(); }} onGenerate={generate}
         />
@@ -235,7 +238,11 @@ export default function Dashboard({ onSelection }: Props) {
               </button>
               {focus && <button className="ghost" onClick={() => setFocus(null)}>Show all loaded nodes</button>}
               <button className="ghost" onClick={backToOverview}>Overview</button>
-              <span className="muted">{visNodes.length} nodes · {visEdges.length} edges{meta.overview.truncated ? " · overview truncated to top entries" : ""}</span>
+              <span className="muted">
+                {visNodes.length} nodes · {visEdges.length} edges · {meta.overview.levels?.length ?? 0} levels ·{" "}
+                {meta.overview.entry_points ?? 0} entry points
+                {meta.overview.truncated ? ` · showing ${visNodes.length} of ${meta.overview.total_graph_nodes ?? visNodes.length} graph nodes` : ""}
+              </span>
             </div>
             <div className="canvas">
               {visNodes.length === 0 ? (

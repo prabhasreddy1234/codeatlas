@@ -135,9 +135,27 @@ def test_json_roundtrip_and_metadata(sample_doc):
 
 def test_index_queries(sample_doc):
     idx = GraphIndex(sample_doc)
+    complete = idx.overview()
+    assert len(complete["nodes"]) == len(sample_doc.nodes)
+    assert len(complete["edges"]) >= len(sample_doc.edges)
+    assert {node["id"] for node in complete["nodes"]} == {node.id for node in sample_doc.nodes}
     ov = idx.overview(50)
-    names = {n["name"] for n in ov["nodes"]}
-    assert {"MainActivity", "UserViewModel", "UserRepositoryImpl", "UserDao"} <= names
+    by_name = {n["qualified_name"]: n for n in ov["nodes"]}
+    assert "com.example.app.MainActivity.onCreate" in by_name
+    assert "com.example.app.ui.UserViewModel.refresh" in by_name
+    assert "com.example.app.data.UserRepositoryImpl.fetchUsers" in by_name
+    assert "com.example.app.data.UserDao.all" in by_name
+    assert by_name["com.example.app.MainActivity.onCreate"]["level"] == 0
+    assert "entry_point" in by_name["com.example.app.MainActivity.onCreate"]["roles"]
+    assert len(ov["levels"]) > 1
+    assert ov["total_reachable_nodes"] >= len(ov["nodes"])
+    assert any(edge["type"] == "NAVIGATES_TO" and
+               edge["target"] == by_name["com.example.app.ui.DetailActivity.onCreate"]["id"]
+               for edge in ov["edges"])
+    assert any(edge["status"] == "inferred" and "runtime dispatch" in edge["provenance"]
+               for edge in ov["edges"])
+    limited = idx.overview(1)
+    assert limited["truncated"] and len(limited["nodes"]) == 1
     q = by_qn(sample_doc)
     nb = idx.neighbors(q["com.example.app.ui.UserViewModel"].id, "out")
     assert "UserRepository" in {n["name"] for n in nb["nodes"]}

@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import {
   AtSign, Box, Cable, Cog, Database, FileCode, FolderGit2, Hammer, LayoutTemplate, ListOrdered,
-  Package, Plug, Radio, SquareFunction, Timer, Warehouse, Layers, Cuboid,
+  Package, PlayCircle, Plug, Radio, Rocket, SquareFunction, Timer, Warehouse, Layers, Cuboid,
 } from "lucide-react";
 import { siAndroid, siGithub, siJetpackcompose, siKotlin, siOpenjdk, siPython } from "simple-icons";
 import type { EdgeType, GNode } from "../types/graph";
@@ -30,8 +30,11 @@ const lucide = (I: Lucide) => ({ size = 18, color }: IconProps) => <I size={size
 export interface Kind { key: string; label: string; color: string; Icon: ComponentType<IconProps> }
 
 export const KINDS: Record<string, Kind> = {
+  entry_point: { key: "entry_point", label: "Entry point", color: "#fb7185", Icon: lucide(Rocket) },
   activity: { key: "activity", label: "Activity", color: "#3ddc84", Icon: AndroidLogo },
+  application: { key: "application", label: "Application", color: "#34d399", Icon: lucide(PlayCircle) },
   fragment: { key: "fragment", label: "Fragment", color: "#2fb8a0", Icon: lucide(Cuboid) },
+  provider: { key: "provider", label: "Provider", color: "#14b8a6", Icon: lucide(Plug) },
   service: { key: "service", label: "Service", color: "#e0a030", Icon: lucide(Cog) },
   receiver: { key: "receiver", label: "BroadcastReceiver", color: "#d9822b", Icon: lucide(Radio) },
   viewmodel: { key: "viewmodel", label: "ViewModel", color: "#7c6cf0", Icon: lucide(Layers) },
@@ -52,7 +55,7 @@ export const KINDS: Record<string, Kind> = {
   repo: { key: "repo", label: "Repository root", color: "#e2e8f0", Icon: lucide(FolderGit2) },
 };
 
-const ROLE_PRIORITY = ["activity", "fragment", "composable", "viewmodel", "dao", "repository", "worker", "service", "receiver"];
+const ROLE_PRIORITY = ["entry_point", "application", "activity", "fragment", "provider", "composable", "viewmodel", "dao", "repository", "worker", "service", "receiver"];
 
 export function kindOf(n: GNode): Kind {
   const role = ROLE_PRIORITY.find((r) => n.roles.includes(r));
@@ -86,5 +89,5 @@ export const EDGE_STYLE: Record<EdgeType, { color: string; label: string; dash?:
 };
 
 export const ALL_EDGE_TYPES = Object.keys(EDGE_STYLE) as EdgeType[];
-export const DEFAULT_EDGE_TYPES: EdgeType[] = ["CALLS", "EXTENDS", "IMPLEMENTS", "OVERRIDES", "USES", "INJECTS", "NAVIGATES_TO", "CONTAINS"];
+export const DEFAULT_EDGE_TYPES: EdgeType[] = ["CALLS", "EXTENDS", "IMPLEMENTS", "OVERRIDES", "USES", "INJECTS", "NAVIGATES_TO", "CONTAINS", "IMPORTS", "DECLARES"];
 export const NODE_FILTERS = ["package", "file", "class", "interface", "object", "enum", "annotation", "function", "constructor", "layout"] as const;

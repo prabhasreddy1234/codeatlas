@@ -4,6 +4,7 @@ from app.analyzer.model import ImportDecl, ParsedFile, TypeDecl
 from app.analyzer.pipeline import analyze_repository
 from app.analyzer.python_extractor import parse_python
 from app.analyzer.resolver import SymbolIndex, TypeInfo
+from app.graph.index import GraphIndex
 
 
 def test_python_extraction_handles_declarations_imports_and_async():
@@ -64,6 +65,11 @@ def test_python_repository_graph_resolves_imports_and_calls(tmp_path):
     assert ("USES", "shop.service.Service.__init__", "shop.models.Store") in edges
     assert ("CALLS", "shop.service.Service.run", "shop.models.Store.save") in edges
     assert ("CALLS", "shop.service.main", "shop.service.Service.run") in edges
+    overview = GraphIndex(doc).overview()
+    main = next(node for node in overview["nodes"] if node["qualified_name"] == "shop.service.main")
+    assert main["level"] == 0 and "entry_point" in main["roles"]
+    assert any(node["qualified_name"] == "shop.models.Store.save" and node["level"] > 0
+               for node in overview["nodes"])
 
 
 def test_python_literal_and_unpacking_inference():

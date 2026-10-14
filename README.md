@@ -50,7 +50,7 @@ Always open the UI via `http://localhost:5173` (the Vite dev server proxies `/ap
    ```
 5. Restart the backend.
 
-**Permissions.** *Connect GitHub* requests **no scopes** (public repositories only). *Connect with private repository access* requests the `repo` scope, which is the narrowest scope GitHub OAuth Apps offer for private repositories (it is read/write-capable at GitHub's level; CodeAtlas only reads). You must explicitly choose that button. Tokens are encrypted server-side and never sent to the browser. For organization repos, the org may need to approve the OAuth app.
+**Permissions.** *Connect GitHub* requests **no scopes** and lists public repositories only. *Connect with private repository access* requests the `repo` scope, which is the narrowest scope GitHub OAuth Apps offer for private repositories (it is read/write-capable at GitHub's level; CodeAtlas only reads), and lists private repositories only. To switch between public and private listings, disconnect and reconnect with the other option. You must explicitly choose the private-access button. Tokens are encrypted server-side and never sent to the browser. For organization repos, the org may need to approve the OAuth app.
 
 ## How it works
 
@@ -58,7 +58,7 @@ Always open the UI via `http://localhost:5173` (the Vite dev server proxies `/ap
 2. POST requests require an `X-CSRF-Token` header and an allowed `Origin`.
 3. Generate: verify branch via GitHub API → shallow clone/fetch into `.codeatlas-data/repos` → checkout exact branch → record commit SHA → analyze.
 4. Graphs are stored as JSON under `.codeatlas-data/graphs/{owner}/{repo}/{branch}/{sha}.json`. If the commit is unchanged, the stored graph is reused (use *Re-index* to force).
-5. The UI shows a focused overview of code entry points and their neighbors; expand callers, dependencies, or members per node.
+5. The initial graph includes all indexed nodes and relationships. Application entry points and reachable call/navigation levels are marked so you can trace execution through the complete graph.
 
 Repository code is treated as untrusted: it is only parsed, never executed; git hooks are disabled, symlinks are skipped, owner/repo/branch/paths are validated, and files over the size limit are skipped.
 

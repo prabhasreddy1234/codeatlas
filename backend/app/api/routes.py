@@ -22,7 +22,8 @@ _cache: "OrderedDict[tuple, GraphIndex]" = OrderedDict()
 def list_repos(request: Request, sess: Session = Depends(require_session)):
     gh = request.app.state.jobs.github_factory(sess.token)
     try:
-        return {"repositories": gh.list_repos()}
+        visibility = "private" if sess.private_access else "public"
+        return {"repositories": gh.list_repos(visibility=visibility)}
     finally:
         gh.close()
 
@@ -79,7 +80,7 @@ def graph_status(owner: str, repo: str, request: Request, branch: str = Query(..
 
 @router.get("/graphs/{owner}/{repo}")
 def get_graph(owner: str, repo: str, request: Request, branch: str = Query(...),
-              limit: int = Query(120, ge=10, le=500), sess: Session = Depends(require_session)):
+              limit: Optional[int] = Query(None, ge=10), sess: Session = Depends(require_session)):
     idx = load_index(owner, repo, branch, request, sess)
     d = idx.doc
     return {"repository": d.repository, "branch": d.branch, "commit_sha": d.commit_sha,

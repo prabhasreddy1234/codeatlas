@@ -6,8 +6,10 @@ from .resolver import SymbolIndex, TypeInfo
 EXTERNAL_SUPER_ROLES = {
     "activity": {"Activity", "AppCompatActivity", "FragmentActivity", "ComponentActivity",
                  "ListActivity", "FlutterActivity"},
+    "application": {"Application", "MultiDexApplication"},
     "fragment": {"Fragment", "DialogFragment", "BottomSheetDialogFragment",
                  "PreferenceFragmentCompat", "ListFragment"},
+    "provider": {"ContentProvider"},
     "service": {"Service", "IntentService", "LifecycleService", "JobService", "JobIntentService",
                 "AccessibilityService", "MediaBrowserServiceCompat", "FirebaseMessagingService"},
     "receiver": {"BroadcastReceiver", "AppWidgetProvider"},
