@@ -28,19 +28,17 @@ def _redirect_error(request: Request, code: str) -> RedirectResponse:
 
 
 @router.get("/auth/github")
-def start_oauth(request: Request, private: bool = False):
+def start_oauth(request: Request):
     s = request.app.state.settings
     if not s.github_client_id or not s.github_client_secret:
         raise AppError(503, "oauth_not_configured",
                        "GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in .env.")
     state = secrets.token_urlsafe(32)
-    # Public repositories need no scope. `repo` is GitHub's only OAuth-App scope that
-    # allows reading private repositories, so it is requested only on explicit opt-in.
-    scope = "repo" if private else ""
+    # GitHub OAuth Apps require the `repo` scope to access private repositories.
+    scope = "repo"
     params = {"client_id": s.github_client_id, "redirect_uri": s.callback_url, "state": state,
               "allow_signup": "false"}
-    if scope:
-        params["scope"] = scope
+    params["scope"] = scope
     resp = RedirectResponse(f"{s.github_web_url}/login/oauth/authorize?{urlencode(params)}", status_code=302)
     resp.set_cookie(STATE_COOKIE, _serializer(request).dumps({"state": state, "scope": scope}),
                     max_age=600, httponly=True, samesite="lax", secure=s.cookie_secure, path="/")

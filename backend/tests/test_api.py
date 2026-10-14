@@ -45,10 +45,8 @@ def test_csrf_required_for_post(client):
 
 def test_oauth_state_validation(app):
     c = TestClient(app, base_url="http://localhost:8000", follow_redirects=False)
-    r = c.get("/auth/github", params={"private": "true"})
-    assert r.status_code == 302 and "scope=repo" in r.headers["location"] and "state=" in r.headers["location"]
     r = c.get("/auth/github")
-    assert "scope=" not in r.headers["location"]
+    assert r.status_code == 302 and "scope=repo" in r.headers["location"] and "state=" in r.headers["location"]
     bad = c.get("/auth/github/callback", params={"code": "x", "state": "forged"})
     assert bad.status_code == 302 and "auth_error=invalid_state" in bad.headers["location"]
     nocookie = TestClient(app, follow_redirects=False).get("/auth/github/callback", params={"code": "x", "state": "s"})

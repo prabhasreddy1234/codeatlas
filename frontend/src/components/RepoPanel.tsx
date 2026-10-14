@@ -58,7 +58,7 @@ export default function RepoPanel(p: Props) {
         {!p.reposLoading && p.repos.length === 0 && (
           <small className="repo-empty">
             {p.visibility === "private" && !p.privateAccess ? (
-              <>Private repositories require additional access. <a href="/auth/github?private=true">Connect with private repository access</a>.</>
+              <> <a href="/auth/github">Reconnect GitHub</a> to allow private repository access.</>
             ) : (
               `No ${p.visibility} repositories found.`
             )}

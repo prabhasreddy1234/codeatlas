@@ -50,7 +50,7 @@ Always open the UI via `http://localhost:5173` (the Vite dev server proxies `/ap
    ```
 5. Restart the backend.
 
-**Permissions.** *Connect GitHub* requests **no scopes** (public repositories only). The dashboard shows public repositories by default; use its **Private** filter to show private repositories after granting access. *Connect with private repository access* requests the `repo` scope, which is the narrowest scope GitHub OAuth Apps offer for private repositories (it is read/write-capable at GitHub's level; CodeAtlas only reads). You must explicitly choose that button. Tokens are encrypted server-side and never sent to the browser. For organization repos, the org may need to approve the OAuth app.
+**Permissions.** The single *Connect GitHub* button requests the `repo` scope, which GitHub OAuth Apps require for private repository access (it is read/write-capable at GitHub's level; CodeAtlas only reads). The dashboard shows public repositories by default; use its **Private** filter to show private repositories. Tokens are encrypted server-side and never sent to the browser. For organization repos, the org may need to approve the OAuth app.
 
 ## How it works
 
@@ -91,7 +91,7 @@ Resolution is syntax- and index-based, not compiler-grade. CodeAtlas marks each 
 | "GitHub OAuth is not configured" | Set `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` in `.env`, restart backend |
 | `redirect_uri` mismatch | Callback URL must be exactly `http://localhost:8000/auth/github/callback` |
 | Invalid state / login loop | Use `http://localhost:5173` consistently (not 127.0.0.1); clear cookies |
-| Private repos missing | Use *Connect with private repository access*; approve the org if applicable |
+| Private repos missing | Reconnect with *Connect GitHub* to grant the required access; approve the org if applicable |
 | "Cannot reach backend" | Start uvicorn on port 8000 |
 | `Attribute "app" not found` | Use `--factory`: `uvicorn app.main:create_app --factory` |
 | Clone/checkout fails | Ensure `git` is installed and the branch exists; see error in UI |
