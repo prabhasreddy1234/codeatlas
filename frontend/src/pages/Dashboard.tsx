@@ -12,9 +12,13 @@ import Legend from "../components/Legend";
 
 const msg = (e: unknown) => (e instanceof ApiError ? e.message : "Unexpected error");
 
-interface Props { onSelection: (repo?: string, branch?: string) => void }
+interface Props {
+  privateAccess: boolean;
+  onSelection: (repo?: string, branch?: string) => void;
+}
 
-export default function Dashboard({ onSelection }: Props) {
+export default function Dashboard({ privateAccess, onSelection }: Props) {
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [repos, setRepos] = useState<Repo[]>([]);
   const [reposLoading, setReposLoading] = useState(true);
   const [repo, setRepo] = useState<Repo | null>(null);
@@ -46,7 +50,16 @@ export default function Dashboard({ onSelection }: Props) {
   const br = branch?.name;
 
   useEffect(() => {
-    api.repos().then(setRepos).catch((e) => setError(msg(e))).finally(() => setReposLoading(false));
+    let cancelled = false;
+    setReposLoading(true);
+    api.repos(visibility)
+      .then((items) => { if (!cancelled) setRepos(items); })
+      .catch((e) => { if (!cancelled) setError(msg(e)); })
+      .finally(() => { if (!cancelled) setReposLoading(false); });
+    return () => { cancelled = true; };
+  }, [visibility]);
+
+  useEffect(() => {
     return () => { if (poll.current) window.clearTimeout(poll.current); };
   }, []);
 
@@ -55,6 +68,16 @@ export default function Dashboard({ onSelection }: Props) {
   const resetGraph = () => {
     setMeta(null); setNodes(new Map()); setEdges(new Map()); setFocus(null);
     setSelectedId(null); setDetails(null); setResults([]); setMatchIds(new Set()); setQuery("");
+  };
+
+  const changeVisibility = (next: "public" | "private") => {
+    if (next === visibility) return;
+    setVisibility(next);
+    setRepos([]);
+    setRepo(null); setBranch(null); setBranches([]); setJob(null); setError(null);
+    setBranchesLoading(false);
+    if (poll.current) window.clearTimeout(poll.current);
+    resetGraph();
   };
 
   const pickRepo = (r: Repo) => {
@@ -175,7 +198,8 @@ export default function Dashboard({ onSelection }: Props) {
     <div className="dash">
       <div className="sidebar">
         <RepoPanel
-          repos={repos} reposLoading={reposLoading} repo={repo} branches={branches}
+          repos={repos} reposLoading={reposLoading} visibility={visibility} privateAccess={privateAccess}
+          onVisibility={changeVisibility} repo={repo} branches={branches}
           branchesLoading={branchesLoading} branch={branch} job={job} error={error} busy={busy}
           onRepo={pickRepo} onBranch={(b) => { setBranch(b); setJob(null); resetGraph(); }} onGenerate={generate}
         />

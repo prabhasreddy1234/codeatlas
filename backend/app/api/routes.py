@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
@@ -19,10 +19,16 @@ _cache: "OrderedDict[tuple, GraphIndex]" = OrderedDict()
 
 # ---- GitHub ---------------------------------------------------------------
 @router.get("/github/repos")
-def list_repos(request: Request, sess: Session = Depends(require_session)):
+def list_repos(request: Request, visibility: Literal["public", "private"] = Query("public"),
+               sess: Session = Depends(require_session)):
     gh = request.app.state.jobs.github_factory(sess.token)
     try:
-        return {"repositories": gh.list_repos()}
+        repos = gh.list_repos()
+        if visibility == "private" and not sess.private_access:
+            repos = []
+        else:
+            repos = [repo for repo in repos if repo["private"] == (visibility == "private")]
+        return {"repositories": repos}
     finally:
         gh.close()
 

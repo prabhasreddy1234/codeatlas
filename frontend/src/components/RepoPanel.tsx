@@ -5,6 +5,8 @@ import Combobox from "./Combobox";
 interface Props {
   repos: Repo[];
   reposLoading: boolean;
+  visibility: "public" | "private";
+  privateAccess: boolean;
   repo: Repo | null;
   branches: Branch[];
   branchesLoading: boolean;
@@ -12,6 +14,7 @@ interface Props {
   job: JobStatus | null;
   error: string | null;
   busy: boolean;
+  onVisibility: (visibility: "public" | "private") => void;
   onRepo: (r: Repo) => void;
   onBranch: (b: Branch) => void;
   onGenerate: (force: boolean) => void;
@@ -21,6 +24,25 @@ export default function RepoPanel(p: Props) {
   const running = p.job?.state === "queued" || p.job?.state === "running";
   return (
     <div className="repo-panel">
+      <div className="field">
+        <label>Repository visibility</label>
+        <div className="repo-visibility" role="group" aria-label="Repository visibility">
+          <button
+            className={`ghost${p.visibility === "public" ? " active" : ""}`}
+            aria-pressed={p.visibility === "public"}
+            onClick={() => p.onVisibility("public")}
+          >
+            <Globe size={14} /> Public
+          </button>
+          <button
+            className={`ghost${p.visibility === "private" ? " active" : ""}`}
+            aria-pressed={p.visibility === "private"}
+            onClick={() => p.onVisibility("private")}
+          >
+            <Lock size={14} /> Private
+          </button>
+        </div>
+      </div>
       <div className="field">
         <label>Repository</label>
         <Combobox
@@ -33,6 +55,15 @@ export default function RepoPanel(p: Props) {
             </span>
           )}
         />
+        {!p.reposLoading && p.repos.length === 0 && (
+          <small className="repo-empty">
+            {p.visibility === "private" && !p.privateAccess ? (
+              <>Private repositories require additional access. <a href="/auth/github?private=true">Connect with private repository access</a>.</>
+            ) : (
+              `No ${p.visibility} repositories found.`
+            )}
+          </small>
+        )}
       </div>
       <div className="field">
         <label>Branch</label>

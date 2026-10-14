@@ -47,6 +47,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .repo-panel { display: flex; flex-direction: column; gap: 10px; }
 .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
 .repo-row { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.repo-visibility { display: flex; gap: 6px; }
+.repo-visibility .ghost { flex: 1; justify-content: center; }
+.repo-visibility .ghost.active { color: var(--text); border-color: var(--accent); background: var(--panel2); }
+.repo-empty { display: block; margin-top: 6px; color: var(--muted); line-height: 1.5; }
+.repo-empty a { color: #7dd3fc; }
 
 .combo { position: relative; }
 .combo-btn { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel2); text-align: left; }

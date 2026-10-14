@@ -27,7 +27,7 @@ export default function App() {
   return (
     <div className="app">
       <Header me={me} repo={sel.repo} branch={sel.branch} onLogout={logout} />
-      <Dashboard onSelection={onSelection} />
+      <Dashboard privateAccess={Boolean(me.private_access)} onSelection={onSelection} />
     </div>
   );
 }

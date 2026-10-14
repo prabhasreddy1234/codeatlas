@@ -42,7 +42,8 @@ const q = (o: Record<string, string | number | boolean | undefined>) =>
 export const api = {
   me: () => request<Me>("/api/auth/me"),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
-  repos: () => request<{ repositories: Repo[] }>("/api/github/repos").then((r) => r.repositories),
+  repos: (visibility: "public" | "private" = "public") =>
+    request<{ repositories: Repo[] }>(`/api/github/repos?${q({ visibility })}`).then((r) => r.repositories),
   branches: (owner: string, repo: string) =>
     request<{ branches: Branch[] }>(`/api/github/repos/${owner}/${repo}/branches`).then((r) => r.branches),
   generate: (owner: string, repo: string, branch: string, force = false) =>

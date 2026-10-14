@@ -64,9 +64,22 @@ def test_oauth_not_configured(tmp_path):
 
 
 def test_repos_and_branches(client):
-    assert client.get("/api/github/repos").json()["repositories"][0]["full_name"] == "acme/sample"
+    public = client.get("/api/github/repos").json()["repositories"]
+    assert [repo["full_name"] for repo in public] == ["acme/sample"]
+    private = client.get("/api/github/repos", params={"visibility": "private"}).json()["repositories"]
+    assert [repo["full_name"] for repo in private] == ["acme/private-sample"]
+    assert client.get("/api/github/repos", params={"visibility": "all"}).status_code == 422
     assert client.get("/api/github/repos/acme/sample/branches").json()["branches"][0]["name"] == "main"
     assert client.get("/api/github/repos/../x/branches").status_code in (400, 404)
+
+
+def test_private_repos_require_private_scope(app):
+    from fastapi.testclient import TestClient
+    client = TestClient(app, base_url="http://localhost:8000")
+    sess = app.state.sessions.create("public-token", {"login": "octo"}, "")
+    client.cookies.set("codeatlas_session", sess.id)
+    repos = client.get("/api/github/repos", params={"visibility": "private"}).json()["repositories"]
+    assert repos == []
 
 
 def test_generate_and_cache(client, remote_repo):

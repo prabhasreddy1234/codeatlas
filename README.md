@@ -50,7 +50,7 @@ Always open the UI via `http://localhost:5173` (the Vite dev server proxies `/ap
    ```
 5. Restart the backend.
 
-**Permissions.** *Connect GitHub* requests **no scopes** (public repositories only). *Connect with private repository access* requests the `repo` scope, which is the narrowest scope GitHub OAuth Apps offer for private repositories (it is read/write-capable at GitHub's level; CodeAtlas only reads). You must explicitly choose that button. Tokens are encrypted server-side and never sent to the browser. For organization repos, the org may need to approve the OAuth app.
+**Permissions.** *Connect GitHub* requests **no scopes** (public repositories only). The dashboard shows public repositories by default; use its **Private** filter to show private repositories after granting access. *Connect with private repository access* requests the `repo` scope, which is the narrowest scope GitHub OAuth Apps offer for private repositories (it is read/write-capable at GitHub's level; CodeAtlas only reads). You must explicitly choose that button. Tokens are encrypted server-side and never sent to the browser. For organization repos, the org may need to approve the OAuth app.
 
 ## How it works
 
