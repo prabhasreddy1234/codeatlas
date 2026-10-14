@@ -103,15 +103,7 @@ def me(request: Request):
 
 @router.post("/api/auth/logout")
 def logout(request: Request, sess=Depends(require_csrf)):
-    s = request.app.state.settings
     request.app.state.sessions.delete(sess.id)
-    try:  # best-effort revoke so "disconnect" really removes the grant's token
-        with httpx.Client(timeout=10) as http:
-            http.request("DELETE", f"{s.github_api_url}/applications/{s.github_client_id}/token",
-                         auth=(s.github_client_id, s.github_client_secret),
-                         json={"access_token": sess.token})
-    except httpx.HTTPError:
-        pass
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp

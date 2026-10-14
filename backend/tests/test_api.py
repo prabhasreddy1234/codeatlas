@@ -156,6 +156,8 @@ def test_graph_access_is_per_user(app, client):
 
 
 def test_logout(client):
+    session_id = client.cookies["codeatlas_session"]
     r = client.post("/api/auth/logout")
     assert r.status_code == 200
+    assert not client.app.state.sessions.get(session_id)
     assert client.get("/api/auth/me").json()["authenticated"] is False
