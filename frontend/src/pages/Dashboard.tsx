@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback, useEffect, useMemo, useRef, useState,
+  type CSSProperties, type KeyboardEvent, type PointerEvent,
+} from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { ArrowLeftRight, ArrowDownUp, Search } from "lucide-react";
+import {
+  ArrowLeftRight, ArrowDownUp, Expand, PanelLeftClose, PanelLeftOpen, PanelRightClose,
+  PanelRightOpen, Search, Shrink,
+} from "lucide-react";
 import { api, ApiError } from "../api/client";
 import type { Branch, EdgeType, GEdge, GNode, GraphMeta, JobStatus, NodeDetails, Repo } from "../types/graph";
 import type { Direction } from "../graph/layout";
@@ -18,6 +24,13 @@ interface Props {
 }
 
 export default function Dashboard({ privateAccess, onSelection }: Props) {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [inspectorWidth, setInspectorWidth] = useState(360);
+  const [fullscreen, setFullscreen] = useState(false);
+  const canvasShell = useRef<HTMLDivElement>(null);
+  const dashRef = useRef<HTMLDivElement>(null);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [repos, setRepos] = useState<Repo[]>([]);
   const [reposLoading, setReposLoading] = useState(true);
@@ -48,6 +61,12 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   const owner = repo?.owner;
   const name = repo?.name;
   const br = branch?.name;
+
+  useEffect(() => {
+    const syncFullscreen = () => setFullscreen(document.fullscreenElement === canvasShell.current);
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,6 +204,37 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     apply(c);
   };
 
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement === canvasShell.current) {
+        await document.exitFullscreen();
+      } else {
+        await canvasShell.current?.requestFullscreen();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change fullscreen mode.");
+    }
+  };
+
+  const resizeSidebar = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.buttons === 1) setSidebarWidth(Math.min(520, Math.max(220, event.clientX - (dashRef.current?.getBoundingClientRect().left ?? 0))));
+  };
+
+  const resizeInspector = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.buttons === 1) {
+      const right = dashRef.current?.getBoundingClientRect().right ?? window.innerWidth;
+      setInspectorWidth(Math.min(600, Math.max(260, right - event.clientX)));
+    }
+  };
+
+  const adjustPanelWidth = (panel: "sidebar" | "inspector", event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowRight" ? 16 : -16;
+    if (panel === "sidebar") setSidebarWidth((width) => Math.min(520, Math.max(220, width + delta)));
+    else setInspectorWidth((width) => Math.min(600, Math.max(260, width - delta)));
+  };
+
   const visNodes = useMemo(
     () => [...nodes.values()].filter((n) => (typeFilter.has(n.type) || n.type === "repository") && (!focus || focus.has(n.id))),
     [nodes, typeFilter, focus],
@@ -195,8 +245,12 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   }, [edges, edgeFilter, visNodes]);
 
   return (
-    <div className="dash">
-      <div className="sidebar">
+    <div
+      ref={dashRef}
+      className={`dash${sidebarOpen ? "" : " sidebar-collapsed"}${inspectorOpen && meta ? "" : " inspector-collapsed"}`}
+      style={{ "--sidebar-width": `${sidebarWidth}px`, "--inspector-width": `${inspectorWidth}px` } as CSSProperties}
+    >
+      <div className="sidebar" hidden={!sidebarOpen}>
         <RepoPanel
           repos={repos} reposLoading={reposLoading} visibility={visibility} privateAccess={privateAccess}
           onVisibility={changeVisibility} repo={repo} branches={branches}
@@ -235,8 +289,35 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
         <button className="ghost" onClick={() => setShowLegend((s) => !s)}>{showLegend ? "Hide" : "Show"} legend</button>
         {showLegend && <Legend />}
       </div>
+      {sidebarOpen && (
+        <div
+          className="panel-resizer sidebar-resizer"
+          role="separator"
+          aria-label="Resize repository sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={220}
+          aria-valuemax={520}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+          onPointerMove={resizeSidebar}
+          onKeyDown={(event) => adjustPanelWidth("sidebar", event)}
+        />
+      )}
 
       <main className="workspace">
+        <div className="panel-togglebar">
+          <button className="ghost" onClick={() => setSidebarOpen((open) => !open)}
+                  aria-label={sidebarOpen ? "Collapse repository sidebar" : "Expand repository sidebar"}
+                  title={sidebarOpen ? "Collapse repository sidebar" : "Expand repository sidebar"}>
+            {sidebarOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+          </button>
+          <button className="ghost" onClick={() => setInspectorOpen((open) => !open)} disabled={!meta}
+                  aria-label={inspectorOpen ? "Collapse inspector panel" : "Expand inspector panel"}
+                  title={inspectorOpen ? "Collapse inspector panel" : "Expand inspector panel"}>
+            {inspectorOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+          </button>
+        </div>
         {meta ? (
           <>
             <div className="toolbar">
@@ -261,7 +342,14 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
               <button className="ghost" onClick={backToOverview}>Overview</button>
               <span className="muted">{visNodes.length} nodes · {visEdges.length} edges{meta.overview.truncated ? " · overview truncated to top entries" : ""}</span>
             </div>
-            <div className="canvas">
+            <div className="canvas-shell" ref={canvasShell}>
+              <button className="ghost fullscreen-toggle" onClick={toggleFullscreen}
+                      aria-label={fullscreen ? "Exit fullscreen" : "Open canvas fullscreen"}
+                      title={fullscreen ? "Exit fullscreen" : "Open canvas fullscreen"}>
+                {fullscreen ? <Shrink size={15} /> : <Expand size={15} />}
+                {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              </button>
+              <div className="canvas">
               {visNodes.length === 0 ? (
                 <div className="canvas-empty">
                   <div>
@@ -291,6 +379,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
                   />
                 </ReactFlowProvider>
               )}
+              </div>
             </div>
           </>
         ) : (
@@ -300,7 +389,23 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
         )}
       </main>
 
-      {meta && (
+      {meta && inspectorOpen && (
+        <div
+          className="panel-resizer inspector-resizer"
+          role="separator"
+          aria-label="Resize inspector panel"
+          aria-orientation="vertical"
+          aria-valuemin={260}
+          aria-valuemax={600}
+          aria-valuenow={inspectorWidth}
+          tabIndex={0}
+          onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+          onPointerMove={resizeInspector}
+          onKeyDown={(event) => adjustPanelWidth("inspector", event)}
+        />
+      )}
+
+      {meta && inspectorOpen && (
         <Inspector
           details={details} loading={detailsLoading} onClose={() => select(null)}
           onExpand={(id, d) => expand(id, d)} onMembers={(id) => expand(id, "both", true)}
