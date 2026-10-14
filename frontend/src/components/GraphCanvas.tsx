@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Background, BackgroundVariant, ControlButton, Controls, MarkerType, ReactFlow,
   useReactFlow, type Edge,
@@ -67,9 +67,12 @@ export default function GraphCanvas({ nodes, edges, selectedId, matchIds, direct
   }, [edges, nodes, selectedId]);
 
   const key = useMemo(() => nodes.map((n) => n.id).join(",") + direction, [nodes, direction]);
+  const previousKey = useRef(key);
   useEffect(() => {
+    const graphChanged = previousKey.current !== key;
+    previousKey.current = key;
     const t = setTimeout(() => {
-      if (selectedId) {
+      if (!graphChanged && selectedId) {
         const node = rf.getNode(selectedId);
         if (node) {
           rf.fitView({ nodes: [node], padding: 0.5, duration: 350, maxZoom: 1.4 });

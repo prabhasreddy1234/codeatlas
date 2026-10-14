@@ -163,7 +163,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     try {
       const chunk = await api.neighbors(owner, name, br, id, { direction, depth: 1, members });
       merge(chunk);
-      setFocus((f) => (f ? new Set([...f, id, ...chunk.nodes.map((n) => n.id)]) : f));
+      setFocus((f) => new Set([...(f ?? [id]), id, ...chunk.nodes.map((n) => n.id)]));
     } catch (e) { setError(msg(e)); }
   };
 
@@ -173,6 +173,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
       const chunk = await api.neighbors(owner, name, br, id, { direction: "both", depth: 1 });
       merge(chunk);
       setFocus(new Set([id, ...chunk.nodes.map((n) => n.id)]));
+      setSelectedId(id);
     } catch (e) { setError(msg(e)); }
   };
 
@@ -408,7 +409,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
       {meta && inspectorOpen && (
         <Inspector
           details={details} loading={detailsLoading} onClose={() => select(null)}
-          onExpand={(id, d) => expand(id, d)} onMembers={(id) => expand(id, "both", true)}
+          onMembers={(id) => expand(id, "both", true)}
           onFocus={hideUnrelated} onSelect={(id) => { select(id); if (!nodes.has(id)) expand(id, "both"); }}
         />
       )}

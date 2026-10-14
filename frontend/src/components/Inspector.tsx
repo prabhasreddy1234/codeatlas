@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine, EyeOff, ListTree, X } from "lucide-react";
+import { EyeOff, ListTree, X } from "lucide-react";
 import type { EdgeView, NodeDetails } from "../types/graph";
 import { EDGE_STYLE, LanguageLogo, kindOf, typeLabel } from "../graph/style";
 
@@ -6,7 +6,6 @@ interface Props {
   details: NodeDetails | null;
   loading: boolean;
   onClose: () => void;
-  onExpand: (id: string, direction: "in" | "out") => void;
   onMembers: (id: string) => void;
   onFocus: (id: string) => void;
   onSelect: (id: string) => void;
@@ -43,7 +42,7 @@ function Group({ title, edges, onSelect, outgoing }: { title: string; edges: Edg
   );
 }
 
-export default function Inspector({ details, loading, onClose, onExpand, onMembers, onFocus, onSelect }: Props) {
+export default function Inspector({ details, loading, onClose, onMembers, onFocus, onSelect }: Props) {
   if (!details) {
     return (
       <aside className="inspector empty">
@@ -74,8 +73,6 @@ export default function Inspector({ details, loading, onClose, onExpand, onMembe
         {details.parent && (<><dt>Contained in</dt><dd><button className="link" onClick={() => onSelect(details.parent!.id)}>{details.parent.name}</button></dd></>)}
       </dl>
       <div className="actions">
-        <button onClick={() => onExpand(n.id, "in")} title="Show callers and other upstream dependents"><ArrowUpFromLine size={14} /> Upstream</button>
-        <button onClick={() => onExpand(n.id, "out")} title="Show downstream dependencies"><ArrowDownToLine size={14} /> Downstream</button>
         {(isTypeLike || n.type === "package" || n.type === "file") && (
           <button onClick={() => onMembers(n.id)} title="Show contained declarations"><ListTree size={14} /> Contents</button>
         )}
