@@ -155,9 +155,25 @@ def test_graph_access_is_per_user(app, client):
     assert r.status_code == 404
 
 
-def test_logout(client):
+def test_logout(client, monkeypatch):
+    calls = []
+
+    class GitHubClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def request(self, method, url, **kwargs):
+            calls.append((method, url, kwargs))
+            return None
+
+    monkeypatch.setattr("app.auth.routes.httpx.Client", lambda **_: GitHubClient())
     session_id = client.cookies["codeatlas_session"]
     r = client.post("/api/auth/logout")
     assert r.status_code == 200
     assert not client.app.state.sessions.get(session_id)
     assert client.get("/api/auth/me").json()["authenticated"] is False
+    assert calls == [("DELETE", "https://api.github.com/applications/cid/grant",
+                      {"auth": ("cid", "csecret"), "json": {"access_token": "gho_faketoken"}})]

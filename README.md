@@ -55,7 +55,7 @@ Always open the UI via `http://localhost:5173` (the Vite dev server proxies `/ap
 ## How it works
 
 1. OAuth with a signed `state` cookie; sessions are opaque HttpOnly cookies, tokens are Fernet-encrypted in SQLite.
-2. POST requests require an `X-CSRF-Token` header and an allowed `Origin`. Disconnecting clears the local CodeAtlas session but keeps the GitHub OAuth grant, so reconnecting does not require authorizing the app again. Revoke the grant from GitHub's application settings if you want to remove CodeAtlas access.
+2. POST requests require an `X-CSRF-Token` header and an allowed `Origin`. Disconnecting clears the local CodeAtlas session and revokes the GitHub OAuth grant, so reconnecting sends you through GitHub authorization again.
 3. Generate: verify branch via GitHub API → shallow clone/fetch into `.codeatlas-data/repos` → checkout exact branch → record commit SHA → analyze.
 4. Graphs are stored as JSON under `.codeatlas-data/graphs/{owner}/{repo}/{branch}/{sha}.json`. If the commit is unchanged, the stored graph is reused (use *Re-index* to force).
 5. The UI shows a focused overview of code entry points and their neighbors; expand callers, dependencies, or members per node.
