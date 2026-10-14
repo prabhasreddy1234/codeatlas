@@ -15,6 +15,7 @@ import RepoPanel from "../components/RepoPanel";
 import GraphCanvas from "../components/GraphCanvas";
 import Inspector from "../components/Inspector";
 import Legend from "../components/Legend";
+import ChatPanel from "../components/ChatPanel";
 
 const msg = (e: unknown) => (e instanceof ApiError ? e.message : "Unexpected error");
 
@@ -246,11 +247,13 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   }, [edges, edgeFilter, visNodes]);
 
   return (
-    <div
-      ref={dashRef}
-      className={`dash${sidebarOpen ? "" : " sidebar-collapsed"}${inspectorOpen && meta ? "" : " inspector-collapsed"}`}
-      style={{ "--sidebar-width": `${sidebarWidth}px`, "--inspector-width": `${inspectorWidth}px` } as CSSProperties}
-    >
+    <div className="dashboard-split">
+      <section className="dashboard-content" aria-label="Code graph workspace">
+        <div
+          ref={dashRef}
+          className={`dash${sidebarOpen ? "" : " sidebar-collapsed"}${inspectorOpen && meta ? "" : " inspector-collapsed"}`}
+          style={{ "--sidebar-width": `${sidebarWidth}px`, "--inspector-width": `${inspectorWidth}px` } as CSSProperties}
+        >
       <div className="sidebar" hidden={!sidebarOpen}>
         <RepoPanel
           repos={repos} reposLoading={reposLoading} visibility={visibility} privateAccess={privateAccess}
@@ -413,6 +416,15 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
           onFocus={hideUnrelated} onSelect={(id) => { select(id); if (!nodes.has(id)) expand(id, "both"); }}
         />
       )}
+        </div>
+      </section>
+      <ChatPanel
+        repository={repo?.full_name ?? null}
+        branch={branch?.name ?? null}
+        graph={meta}
+        nodes={[...nodes.values()]}
+        edges={[...edges.values()]}
+      />
     </div>
   );
 }
