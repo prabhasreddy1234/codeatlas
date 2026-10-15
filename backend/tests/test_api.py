@@ -95,6 +95,7 @@ def test_generate_and_cache(client, remote_repo):
     indexed_at = g["indexed_at"]
     again = gen(client).json()
     assert again["state"] == "ready" and again["cached"] is True
+    assert again["nodes"] == [] and again["edges"] == []
     g2 = client.get("/api/graphs/acme/sample", params={"branch": "main"}).json()
     assert g2["indexed_at"] == indexed_at
     # node details + neighbors
@@ -121,7 +122,30 @@ def test_graph_stream_sends_latest_job_graph(client, remote_repo):
         if line.startswith("data: ")
     ]
     assert events[-1]["state"] == "ready"
-    assert events[-1]["nodes"] and events[-1]["edges"]
+    assert events[-1]["nodes"] == [] and events[-1]["edges"] == []
+
+
+def test_stream_updates_coalesce_without_losing_graph_items():
+    import queue
+
+    from app.graph.jobs import JobManager
+    from app.schemas.graph import GraphNode, JobStatus
+
+    listener = queue.Queue(maxsize=1)
+    nodes = [
+        GraphNode(id=f"node-{index}", type="class", name=f"Node{index}",
+                  qualified_name=f"sample.Node{index}")
+        for index in range(245)
+    ]
+    JobManager._publish(listener, JobStatus(state="running", nodes=nodes[:100]))
+    JobManager._publish(listener, JobStatus(state="running", nodes=nodes[100:200]))
+    JobManager._publish(listener, JobStatus(state="running", nodes=nodes[200:]))
+    update = listener.get_nowait()
+    assert [node.id for node in update.nodes] == [f"node-{index}" for index in range(240)]
+
+    JobManager._publish(listener, JobStatus(state="ready", nodes=nodes))
+    complete = listener.get_nowait()
+    assert complete.state == "ready" and complete.nodes == []
 
 
 def test_new_commit_reindexes_and_branches_are_separate(client, remote_repo):

@@ -17,13 +17,27 @@ interface Props {
   selectedId: string | null;
   matchIds: Set<string>;
   direction: Direction;
+  streaming: boolean;
   onSelect: (id: string | null) => void;
   onReset: () => void;
 }
 
-export default function GraphCanvas({ nodes, edges, selectedId, matchIds, direction, onSelect, onReset }: Props) {
+export default function GraphCanvas({
+  nodes, edges, selectedId, matchIds, direction, streaming, onSelect, onReset,
+}: Props) {
   const rf = useReactFlow();
-  const positions = useMemo(() => layout(nodes, edges, direction), [nodes, edges, direction]);
+  const lastStreamFitCount = useRef(0);
+  const positions = useMemo(() => {
+    if (!streaming) return layout(nodes, edges, direction);
+    const columns = 12;
+    return Object.fromEntries(nodes.map((node, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      return [node.id, direction === "LR"
+        ? { x: column * 270, y: row * 92 }
+        : { x: row * 270, y: column * 92 }];
+    }));
+  }, [nodes, edges, direction, streaming]);
 
   const related = useMemo(() => {
     if (!selectedId) return null;
@@ -69,6 +83,15 @@ export default function GraphCanvas({ nodes, edges, selectedId, matchIds, direct
   const key = useMemo(() => nodes.map((n) => n.id).join(",") + direction, [nodes, direction]);
   const previousKey = useRef(key);
   useEffect(() => {
+    if (streaming) {
+      if (nodes.length < Math.max(1, lastStreamFitCount.current + 40)) return;
+      lastStreamFitCount.current = nodes.length;
+      const t = setTimeout(() => {
+        rf.fitView({ padding: 0.15, duration: 250, maxZoom: 0.9 });
+      }, 80);
+      return () => clearTimeout(t);
+    }
+    lastStreamFitCount.current = 0;
     const graphChanged = previousKey.current !== key;
     previousKey.current = key;
     const t = setTimeout(() => {
@@ -83,13 +106,14 @@ export default function GraphCanvas({ nodes, edges, selectedId, matchIds, direct
     }, 80);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, selectedId]);
+  }, [key, selectedId, streaming, nodes.length]);
 
   return (
     <ReactFlow
       nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} minZoom={0.05} maxZoom={2}
-      nodesConnectable={false} nodesDraggable edgesFocusable={false} fitView
-      onNodeClick={(_, n) => onSelect(n.id)} onPaneClick={() => onSelect(null)}
+      nodesConnectable={false} nodesDraggable={!streaming} edgesFocusable={false} fitView onlyRenderVisibleElements
+      onNodeClick={streaming ? undefined : (_, n) => onSelect(n.id)}
+      onPaneClick={streaming ? undefined : () => onSelect(null)}
       proOptions={{ hideAttribution: true }}
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1e293b" />

@@ -46,10 +46,10 @@ def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sh
         progress("parsing", i, total, f"Parsed {rel}", builder=builder)
     for rel, _ in sc.layouts:
         builder.add_layout(rel)
-    progress("resolving", total, total, "Resolving symbols and relationships", builder=builder)
     builder.resolve_all()
     for rel, path in sc.navs:
         builder.add_navigation(rel, path)
+    progress("resolving", total, total, "Resolved symbols and relationships", builder=builder)
     nodes, edges, stats = builder.finish()
     stats.update({"source_files": total, "files_with_syntax_errors": parse_errors,
                   "layout_files": len(sc.layouts), "navigation_files": len(sc.navs)})

@@ -38,11 +38,14 @@ def test_analysis_progress_contains_incremental_graph(sample_root):
     from app.analyzer.pipeline import analyze_repository
 
     updates = []
-    analyze_repository(
+
+    def collect(stage, done, total, message, builder=None):
+        nodes, edges = builder.drain_changes() if builder else ([], [])
+        updates.append((stage, done, total, len(builder.nodes) if builder else 0, len(nodes), len(edges)))
+
+    doc = analyze_repository(
         sample_root, "acme", "sample", "main", "a" * 40,
-        progress=lambda stage, done, total, message, builder=None: updates.append(
-            (stage, done, total, len(builder.nodes) if builder else 0)
-        ),
+        progress=collect,
     )
     parsing_updates = [update for update in updates if update[0] == "parsing"]
     assert parsing_updates
@@ -51,6 +54,8 @@ def test_analysis_progress_contains_incremental_graph(sample_root):
     assert all(count > 0 for count in node_counts)
     assert node_counts == sorted(node_counts)
     assert node_counts[-1] > node_counts[0]
+    assert sum(update[4] for update in updates) == len(doc.nodes)
+    assert sum(update[5] for update in updates) >= len(doc.edges)
 
 
 def test_generated_dirs_ignored(sample_doc):

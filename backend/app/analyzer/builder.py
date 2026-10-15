@@ -32,6 +32,8 @@ class GraphBuilder:
         self.index = SymbolIndex(provider)
         self.nodes: dict[str, GraphNode] = {}
         self.edges: dict[tuple, GraphEdge] = {}
+        self._changed_nodes: dict[str, GraphNode] = {}
+        self._changed_edges: dict[str, GraphEdge] = {}
         self.pkg_nodes: dict[str, GraphNode] = {}
         self.file_nodes: dict[str, GraphNode] = {}
         self.layout_nodes: dict[str, GraphNode] = {}
@@ -45,7 +47,15 @@ class GraphBuilder:
     # ---- node/edge helpers ---------------------------------------------
     def _add_node(self, n: GraphNode) -> GraphNode:
         self.nodes[n.id] = n
+        self._changed_nodes[n.id] = n
         return n
+
+    def drain_changes(self) -> tuple[list[GraphNode], list[GraphEdge]]:
+        nodes = list(self._changed_nodes.values())
+        edges = list(self._changed_edges.values())
+        self._changed_nodes.clear()
+        self._changed_edges.clear()
+        return nodes, edges
 
     def edge(self, etype: str, source: str, target: Optional[str], *, status="confirmed",
              provenance="", file_path=None, line=None, target_name=None) -> None:
@@ -54,14 +64,16 @@ class GraphBuilder:
         key = (etype, source, target, target_name if target is None else None)
         e = self.edges.get(key)
         if e is None:
-            self.edges[key] = GraphEdge(
+            e = GraphEdge(
                 id=_hid("e", "|".join(map(str, key))), type=etype, source=source, target=target,
                 target_name=target_name, status=status, provenance=provenance,
                 file_path=file_path, line=line, lines=[line] if line else [], count=1)
+            self.edges[key] = e
         else:
             e.count += 1
             if line and line not in e.lines and len(e.lines) < 25:
                 e.lines.append(line)
+        self._changed_edges[e.id] = e
 
     # ---- declaration pass ------------------------------------------------
     def add_parsed_file(self, pf: ParsedFile) -> None:

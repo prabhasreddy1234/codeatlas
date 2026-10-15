@@ -58,6 +58,9 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   const [matchIds, setMatchIds] = useState<Set<string>>(new Set());
   const [showLegend, setShowLegend] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const pendingStreamNodes = useRef(new Map<string, GNode>());
+  const pendingStreamEdges = useRef(new Map<string, GEdge>());
+  const streamFrame = useRef<number | null>(null);
 
   const owner = repo?.owner;
   const name = repo?.name;
@@ -79,11 +82,18 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     return () => { cancelled = true; };
   }, [visibility]);
 
-  useEffect(() => () => eventSourceRef.current?.close(), []);
+  useEffect(() => () => {
+    eventSourceRef.current?.close();
+    if (streamFrame.current !== null) cancelAnimationFrame(streamFrame.current);
+  }, []);
 
   useEffect(() => { onSelection(repo?.full_name, branch?.name); }, [repo, branch, onSelection]);
 
   const resetGraph = () => {
+    if (streamFrame.current !== null) cancelAnimationFrame(streamFrame.current);
+    streamFrame.current = null;
+    pendingStreamNodes.current.clear();
+    pendingStreamEdges.current.clear();
     setMeta(null); setNodes(new Map()); setEdges(new Map()); setFocus(null);
     setSelectedId(null); setDetails(null); setResults([]); setMatchIds(new Set()); setQuery("");
   };
@@ -115,10 +125,31 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
 
   const loadGraph = useCallback(async (o: string, n: string, b: string) => {
     const g = await api.graph(o, n, b);
+    if (streamFrame.current !== null) cancelAnimationFrame(streamFrame.current);
+    streamFrame.current = null;
+    pendingStreamNodes.current.clear();
+    pendingStreamEdges.current.clear();
     setMeta(g);
     setNodes(new Map(g.overview.nodes.map((x) => [x.id, x])));
     setEdges(new Map(g.overview.edges.map((x) => [x.id, x])));
     setFocus(null); setSelectedId(null); setDetails(null);
+  }, []);
+
+  const queueStreamGraph = useCallback((chunk: { nodes: GNode[]; edges: GEdge[] }) => {
+    const liveNodes = pendingStreamNodes.current;
+    const liveEdges = pendingStreamEdges.current;
+    chunk.nodes.forEach((node) => {
+      if (liveNodes.has(node.id) || liveNodes.size < 240) liveNodes.set(node.id, node);
+    });
+    chunk.edges.forEach((edge) => {
+      if (liveEdges.has(edge.id) || liveEdges.size < 1200) liveEdges.set(edge.id, edge);
+    });
+    if (streamFrame.current !== null) return;
+    streamFrame.current = requestAnimationFrame(() => {
+      streamFrame.current = null;
+      setNodes(new Map(liveNodes));
+      setEdges(new Map(liveEdges));
+    });
   }, []);
 
   const watch = useCallback((o: string, n: string, b: string) => {
@@ -130,8 +161,8 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
       try {
         const s: JobStatus = JSON.parse(event.data);
         setJob(s);
-        if (s.nodes && s.nodes.length > 0) {
-          merge({ nodes: s.nodes, edges: s.edges || [] });
+        if (s.nodes?.length) {
+          queueStreamGraph({ nodes: s.nodes, edges: s.edges ?? [] });
         }
         if (s.state === "ready") {
           es.close();
@@ -152,7 +183,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
       es.close();
       setBusy(false);
     };
-  }, [loadGraph]);
+  }, [loadGraph, queueStreamGraph]);
 
   const generate = async (force: boolean) => {
     if (!owner || !name || !br) return;
@@ -161,7 +192,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     try {
       const status = await api.generate(owner, name, br, force);
       setJob(status);
-      if (status.nodes?.length) {
+      if (status.state !== "ready" && status.nodes?.length) {
         merge({ nodes: status.nodes, edges: status.edges ?? [] });
       }
       if (status.state === "ready") {
@@ -270,12 +301,15 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   };
 
   const visNodes = useMemo(
-    () => [...nodes.values()].filter((n) => (typeFilter.has(n.type) || n.type === "repository" || busy) && (!focus || focus.has(n.id))),
+    () => busy
+      ? [...nodes.values()].slice(0, 240)
+      : [...nodes.values()].filter((n) => (typeFilter.has(n.type) || n.type === "repository") && (!focus || focus.has(n.id))),
     [nodes, typeFilter, focus, busy],
   );
   const visEdges = useMemo(() => {
     const ids = new Set(visNodes.map((n) => n.id));
-    return [...edges.values()].filter((e) => edgeFilter.has(e.type) && e.target && ids.has(e.source) && ids.has(e.target));
+    const streamEdges = busy ? [...edges.values()].slice(0, 1200) : [...edges.values()];
+    return streamEdges.filter((e) => edgeFilter.has(e.type) && e.target && ids.has(e.source) && ids.has(e.target));
   }, [edges, edgeFilter, visNodes]);
   const graphVisible = meta !== null || busy;
 
@@ -426,7 +460,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
                 <ReactFlowProvider>
                   <GraphCanvas
                     nodes={visNodes} edges={visEdges} selectedId={selectedId} matchIds={matchIds}
-                    direction={direction} onSelect={select} onReset={backToOverview}
+                    direction={direction} streaming={busy} onSelect={select} onReset={backToOverview}
                   />
                 </ReactFlowProvider>
               )}
