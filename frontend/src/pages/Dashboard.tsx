@@ -57,7 +57,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   const [results, setResults] = useState<GNode[]>([]);
   const [matchIds, setMatchIds] = useState<Set<string>>(new Set());
   const [showLegend, setShowLegend] = useState(false);
-  const poll = useRef<number | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const owner = repo?.owner;
   const name = repo?.name;
@@ -79,9 +79,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     return () => { cancelled = true; };
   }, [visibility]);
 
-  useEffect(() => {
-    return () => { if (poll.current) window.clearTimeout(poll.current); };
-  }, []);
+  useEffect(() => () => eventSourceRef.current?.close(), []);
 
   useEffect(() => { onSelection(repo?.full_name, branch?.name); }, [repo, branch, onSelection]);
 
@@ -96,13 +94,15 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     setRepos([]);
     setRepo(null); setBranch(null); setBranches([]); setJob(null); setError(null);
     setBranchesLoading(false);
-    if (poll.current) window.clearTimeout(poll.current);
+    setBusy(false);
+    eventSourceRef.current?.close();
     resetGraph();
   };
 
   const pickRepo = (r: Repo) => {
     setRepo(r); setBranch(null); setBranches([]); setJob(null); setError(null); resetGraph();
-    if (poll.current) window.clearTimeout(poll.current);
+    setBusy(false);
+    eventSourceRef.current?.close();
     setBranchesLoading(true);
     api.branches(r.owner, r.name)
       .then((bs) => {
@@ -122,35 +122,61 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   }, []);
 
   const watch = useCallback((o: string, n: string, b: string) => {
-    const tick = async () => {
+    eventSourceRef.current?.close();
+    const es = new EventSource(`/api/graphs/${o}/${n}/stream?${new URLSearchParams({ branch: b }).toString()}`);
+    eventSourceRef.current = es;
+
+    es.onmessage = async (event) => {
       try {
-        const s = await api.status(o, n, b);
+        const s: JobStatus = JSON.parse(event.data);
         setJob(s);
         if (s.nodes && s.nodes.length > 0) {
           merge({ nodes: s.nodes, edges: s.edges || [] });
         }
-        if (s.state === "ready") { await loadGraph(o, n, b); setBusy(false); return; }
-        if (s.state === "failed") { setBusy(false); return; }
-        poll.current = window.setTimeout(tick, 700);
-      } catch (e) { setError(msg(e)); setBusy(false); }
+        if (s.state === "ready") {
+          es.close();
+          await loadGraph(o, n, b);
+          setBusy(false);
+        } else if (s.state === "failed") {
+          es.close();
+          setError(s.error?.message ?? "Graph generation failed.");
+          setBusy(false);
+        }
+      } catch (e) {
+        console.error("SSE parse error", e);
+      }
     };
-    tick();
+
+    es.onerror = () => {
+      setError("Graph updates were interrupted. Please try generating the graph again.");
+      es.close();
+      setBusy(false);
+    };
   }, [loadGraph]);
 
   const generate = async (force: boolean) => {
     if (!owner || !name || !br) return;
     setError(null); setBusy(true); resetGraph();
-    if (poll.current) window.clearTimeout(poll.current);
+    eventSourceRef.current?.close();
     try {
-      const s = await api.generate(owner, name, br, force);
-      setJob(s);
-      if (s.nodes && s.nodes.length > 0) {
-        merge({ nodes: s.nodes, edges: s.edges || [] });
+      const status = await api.generate(owner, name, br, force);
+      setJob(status);
+      if (status.nodes?.length) {
+        merge({ nodes: status.nodes, edges: status.edges ?? [] });
       }
-      if (s.state === "ready") { await loadGraph(owner, name, br); setBusy(false); }
-      else if (s.state === "failed") setBusy(false);
-      else watch(owner, name, br);
-    } catch (e) { setError(msg(e)); setBusy(false); }
+      if (status.state === "ready") {
+        await loadGraph(owner, name, br);
+        setBusy(false);
+      } else if (status.state === "failed") {
+        setError(status.error?.message ?? "Graph generation failed.");
+        setBusy(false);
+      } else {
+        watch(owner, name, br);
+      }
+    } catch (e) {
+      setError(msg(e));
+      setBusy(false);
+    }
   };
 
   const merge = (chunk: { nodes: GNode[]; edges: GEdge[] }) => {
@@ -244,8 +270,8 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   };
 
   const visNodes = useMemo(
-    () => [...nodes.values()].filter((n) => (typeFilter.has(n.type) || n.type === "repository") && (!focus || focus.has(n.id))),
-    [nodes, typeFilter, focus],
+    () => [...nodes.values()].filter((n) => (typeFilter.has(n.type) || n.type === "repository" || busy) && (!focus || focus.has(n.id))),
+    [nodes, typeFilter, focus, busy],
   );
   const visEdges = useMemo(() => {
     const ids = new Set(visNodes.map((n) => n.id));
@@ -265,7 +291,10 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
           repos={repos} reposLoading={reposLoading} visibility={visibility} privateAccess={privateAccess}
           onVisibility={changeVisibility} repo={repo} branches={branches}
           branchesLoading={branchesLoading} branch={branch} job={job} error={error} busy={busy}
-          onRepo={pickRepo} onBranch={(b) => { setBranch(b); setJob(null); resetGraph(); }} onGenerate={generate}
+          onRepo={pickRepo} onBranch={(b) => {
+            eventSourceRef.current?.close();
+            setBusy(false); setBranch(b); setJob(null); resetGraph();
+          }} onGenerate={generate}
         />
         {meta && (
           <>

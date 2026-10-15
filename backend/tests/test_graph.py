@@ -34,6 +34,25 @@ def test_node_types_and_locations(sample_doc):
     assert q["com.example.app.MainActivity.onCreate"].type == "function"
 
 
+def test_analysis_progress_contains_incremental_graph(sample_root):
+    from app.analyzer.pipeline import analyze_repository
+
+    updates = []
+    analyze_repository(
+        sample_root, "acme", "sample", "main", "a" * 40,
+        progress=lambda stage, done, total, message, builder=None: updates.append(
+            (stage, done, total, len(builder.nodes) if builder else 0)
+        ),
+    )
+    parsing_updates = [update for update in updates if update[0] == "parsing"]
+    assert parsing_updates
+    assert [update[1] for update in parsing_updates] == list(range(1, parsing_updates[-1][2] + 1))
+    node_counts = [update[3] for update in parsing_updates]
+    assert all(count > 0 for count in node_counts)
+    assert node_counts == sorted(node_counts)
+    assert node_counts[-1] > node_counts[0]
+
+
 def test_generated_dirs_ignored(sample_doc):
     assert not any("Ignored" in n.name for n in sample_doc.nodes)
 

@@ -1,3 +1,4 @@
+import json
 import time
 
 from fastapi.testclient import TestClient
@@ -105,6 +106,22 @@ def test_generate_and_cache(client, remote_repo):
     sr = client.get("/api/graphs/acme/sample/search", params={"branch": "main", "q": "fetchusers"}).json()
     assert any(x["name"] == "fetchUsers" for x in sr["results"])
     assert client.get("/api/graphs/acme/sample/export", params={"branch": "main"}).status_code == 200
+
+
+def test_graph_stream_sends_latest_job_graph(client, remote_repo):
+    gen(client)
+    assert wait_ready(client)["state"] == "ready"
+
+    response = client.get("/api/graphs/acme/sample/stream", params={"branch": "main"})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[-1]["state"] == "ready"
+    assert events[-1]["nodes"] and events[-1]["edges"]
 
 
 def test_new_commit_reindexes_and_branches_are_separate(client, remote_repo):

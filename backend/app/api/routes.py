@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import queue
 from collections import OrderedDict
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from ..auth.deps import require_csrf, require_session
 from ..auth.sessions import Session
@@ -81,6 +84,38 @@ def graph_status(owner: str, repo: str, request: Request, branch: str = Query(..
                  sess: Session = Depends(require_session)):
     validate_owner(owner), validate_repo(repo), validate_branch(branch)
     return request.app.state.jobs.status(owner, repo, branch)
+
+
+@router.get("/graphs/{owner}/{repo}/stream")
+def graph_stream(owner: str, repo: str, request: Request, branch: str = Query(...),
+                 sess: Session = Depends(require_session)):
+    _check(owner, repo, branch, request, sess)
+    jobs = request.app.state.jobs
+    listener = jobs.subscribe(owner, repo, branch)
+
+    async def event_generator():
+        last_heartbeat = asyncio.get_running_loop().time()
+        try:
+            while not await request.is_disconnected():
+                try:
+                    status = listener.get_nowait()
+                except queue.Empty:
+                    if asyncio.get_running_loop().time() - last_heartbeat >= 15:
+                        yield ": keep-alive\n\n"
+                        last_heartbeat = asyncio.get_running_loop().time()
+                    await asyncio.sleep(0.05)
+                    continue
+                yield f"data: {json.dumps(status.model_dump(mode='json'))}\n\n"
+                if status.state in ("ready", "failed"):
+                    break
+        finally:
+            jobs.unsubscribe(owner, repo, branch, listener)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/graphs/{owner}/{repo}")

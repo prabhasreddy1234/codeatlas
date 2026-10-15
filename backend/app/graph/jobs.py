@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,6 +24,7 @@ class JobManager:
         self.jobs: dict[tuple, JobStatus] = {}
         self._lock = threading.Lock()
         self._repo_locks: dict[tuple, threading.Lock] = {}
+        self._listeners: dict[tuple, set[queue.Queue[JobStatus]]] = {}
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="indexer")
 
     @staticmethod
@@ -45,6 +47,32 @@ class JobManager:
             job = self.jobs.setdefault(key, JobStatus())
             for k, v in kw.items():
                 setattr(job, k, v)
+            snapshot = job.model_copy()
+            for listener in self._listeners.get(key, set()):
+                try:
+                    listener.get_nowait()
+                except queue.Empty:
+                    pass
+                listener.put_nowait(snapshot)
+
+    def subscribe(self, owner: str, repo: str, branch: str) -> queue.Queue[JobStatus]:
+        key = self.key(owner, repo, branch)
+        listener: queue.Queue[JobStatus] = queue.Queue(maxsize=1)
+        with self._lock:
+            self._listeners.setdefault(key, set()).add(listener)
+            job = self.jobs.get(key)
+            if job is not None:
+                listener.put_nowait(job.model_copy())
+        return listener
+
+    def unsubscribe(self, owner: str, repo: str, branch: str, listener: queue.Queue[JobStatus]) -> None:
+        key = self.key(owner, repo, branch)
+        with self._lock:
+            listeners = self._listeners.get(key)
+            if listeners is not None:
+                listeners.discard(listener)
+                if not listeners:
+                    self._listeners.pop(key, None)
 
     def start(self, token: str, login: str, owner: str, repo: str, branch: str, force: bool) -> JobStatus:
         validate_owner(owner), validate_repo(repo), validate_branch(branch)
@@ -67,7 +95,7 @@ class JobManager:
                       nodes=doc.nodes if doc else [], edges=doc.edges if doc else [])
             return self.status(owner, repo, branch)
         self._set(key, state="queued", stage="queued", percent=2, commit_sha=sha, cached=False,
-                  message="Queued", error=None, files_total=0, files_done=0)
+                  message="Queued", error=None, files_total=0, files_done=0, nodes=[], edges=[])
         self.executor.submit(self._run, token, owner, repo, branch, force, key)
         return self.status(owner, repo, branch)
 

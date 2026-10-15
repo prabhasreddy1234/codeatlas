@@ -27,7 +27,6 @@ def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sh
     total = len(sc.sources)
     parse_errors = 0
     for i, (rel, abs_path, lang) in enumerate(sc.sources, 1):
-        progress("parsing", i, total, f"Parsing {rel}", builder=builder)
         try:
             data = abs_path.read_bytes()
             if lang == "kotlin":
@@ -39,13 +38,15 @@ def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sh
         except Exception as exc:  # one bad file must not abort indexing
             warnings.append(f"Failed to parse {rel}: {type(exc).__name__}")
             parse_errors += 1
+            progress("parsing", i, total, f"Skipped {rel}", builder=builder)
             continue
         if pf.has_errors:
             parse_errors += 1
         builder.add_parsed_file(pf)
+        progress("parsing", i, total, f"Parsed {rel}", builder=builder)
     for rel, _ in sc.layouts:
         builder.add_layout(rel)
-    progress("resolving", total, total, "Resolving symbols and relationships")
+    progress("resolving", total, total, "Resolving symbols and relationships", builder=builder)
     builder.resolve_all()
     for rel, path in sc.navs:
         builder.add_navigation(rel, path)
