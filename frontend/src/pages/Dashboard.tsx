@@ -126,6 +126,9 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
       try {
         const s = await api.status(o, n, b);
         setJob(s);
+        if (s.nodes && s.nodes.length > 0) {
+          merge({ nodes: s.nodes, edges: s.edges || [] });
+        }
         if (s.state === "ready") { await loadGraph(o, n, b); setBusy(false); return; }
         if (s.state === "failed") { setBusy(false); return; }
         poll.current = window.setTimeout(tick, 700);
@@ -141,6 +144,9 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     try {
       const s = await api.generate(owner, name, br, force);
       setJob(s);
+      if (s.nodes && s.nodes.length > 0) {
+        merge({ nodes: s.nodes, edges: s.edges || [] });
+      }
       if (s.state === "ready") { await loadGraph(owner, name, br); setBusy(false); }
       else if (s.state === "failed") setBusy(false);
       else watch(owner, name, br);

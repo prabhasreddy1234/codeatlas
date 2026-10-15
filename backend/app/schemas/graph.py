@@ -96,3 +96,5 @@ class JobStatus(BaseModel):
     commit_sha: Optional[str] = None
     cached: bool = False
     error: Optional[dict] = None
+    nodes: list[GraphNode] = Field(default_factory=list)
+    edges: list[GraphEdge] = Field(default_factory=list)

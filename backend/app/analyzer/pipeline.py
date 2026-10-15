@@ -11,13 +11,13 @@ from .kotlin_extractor import parse_kotlin
 from .python_extractor import parse_python
 from .scanner import scan
 
-Progress = Callable[[str, int, int, str], None]  # stage, done, total, message
+Progress = Callable[..., None]  # stage, done, total, message, builder=...
 
 
 def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sha: str, *,
                        max_file_bytes: int = 1_000_000, max_files: int = 20_000,
                        progress: Optional[Progress] = None, provider=None) -> GraphDocument:
-    progress = progress or (lambda *a: None)
+    progress = progress or (lambda *a, **kw: None)
     progress("scanning", 0, 0, "Scanning source files")
     sc = scan(root, max_file_bytes, max_files)
     warnings = list(sc.warnings[:50])
@@ -27,7 +27,7 @@ def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sh
     total = len(sc.sources)
     parse_errors = 0
     for i, (rel, abs_path, lang) in enumerate(sc.sources, 1):
-        progress("parsing", i, total, f"Parsing {rel}")
+        progress("parsing", i, total, f"Parsing {rel}", builder=builder)
         try:
             data = abs_path.read_bytes()
             if lang == "kotlin":

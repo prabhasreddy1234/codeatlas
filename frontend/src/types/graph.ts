@@ -98,6 +98,8 @@ export interface JobStatus {
   commit_sha?: string | null;
   cached: boolean;
   error?: { code: string; message: string } | null;
+  nodes?: GNode[];
+  edges?: GEdge[];
 }
 
 export interface Me {
