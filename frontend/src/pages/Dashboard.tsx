@@ -277,6 +277,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     const ids = new Set(visNodes.map((n) => n.id));
     return [...edges.values()].filter((e) => edgeFilter.has(e.type) && e.target && ids.has(e.source) && ids.has(e.target));
   }, [edges, edgeFilter, visNodes]);
+  const graphVisible = meta !== null || busy;
 
   return (
     <div className="dashboard-split">
@@ -357,29 +358,35 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
             {inspectorOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
           </button>
         </div>
-        {meta ? (
+        {graphVisible ? (
           <>
             <div className="toolbar">
-              <div className="search">
-                <Search size={14} />
-                <input value={query} placeholder="Search class, interface, method or file…"
-                       onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSearch()} />
-                {results.length > 0 && (
-                  <div className="search-pop">
-                    {results.map((r) => (
-                      <div key={r.id} className="combo-item" onClick={() => showResult(r)}>
-                        <b>{r.name}</b> <span className="muted">{r.type} · {r.file_path}{r.start_line ? `:${r.start_line}` : ""}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {meta && (
+                <div className="search">
+                  <Search size={14} />
+                  <input value={query} placeholder="Search class, interface, method or file…"
+                         onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSearch()} />
+                  {results.length > 0 && (
+                    <div className="search-pop">
+                      {results.map((r) => (
+                        <div key={r.id} className="combo-item" onClick={() => showResult(r)}>
+                          <b>{r.name}</b> <span className="muted">{r.type} · {r.file_path}{r.start_line ? `:${r.start_line}` : ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <button className="ghost" onClick={() => setDirection((d) => (d === "LR" ? "TB" : "LR"))} title="Toggle layout direction">
                 {direction === "LR" ? <ArrowLeftRight size={14} /> : <ArrowDownUp size={14} />} {direction === "LR" ? "Left → right" : "Top → bottom"}
               </button>
               {focus && <button className="ghost" onClick={() => setFocus(null)}>Show all loaded nodes</button>}
-              <button className="ghost" onClick={backToOverview}>Overview</button>
-              <span className="muted">{visNodes.length} nodes · {visEdges.length} edges{meta.overview.truncated ? " · overview truncated to top entries" : ""}</span>
+              {meta && <button className="ghost" onClick={backToOverview}>Overview</button>}
+              <span className="muted">
+                {busy && job?.message ? `${job.message} · ` : ""}
+                {visNodes.length} nodes · {visEdges.length} edges
+                {meta?.overview.truncated ? " · overview truncated to top entries" : ""}
+              </span>
             </div>
             <div className="canvas-shell" ref={canvasShell}>
               <button className="ghost fullscreen-toggle" onClick={toggleFullscreen}
@@ -392,14 +399,19 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
               {visNodes.length === 0 ? (
                 <div className="canvas-empty">
                   <div>
-                    {meta.overview.nodes.length === 0 ? (
+                    {busy ? (
+                      <>
+                        <h2>Building graph…</h2>
+                        <p className="muted">{job?.message || "Preparing source files for analysis."}</p>
+                      </>
+                    ) : meta?.overview.nodes.length === 0 ? (
                       <>
                         <h2>No code graph to display</h2>
                         <p>
                           CodeAtlas currently graphs Python, Kotlin, and Java source files. This branch has{" "}
-                          {meta.stats.source_files ?? 0} supported source files.
+                          {meta?.stats.source_files ?? 0} supported source files.
                         </p>
-                        {meta.warnings[0] && <p className="muted">{meta.warnings[0]}</p>}
+                        {meta?.warnings[0] && <p className="muted">{meta.warnings[0]}</p>}
                         <p className="muted">Choose a branch or repository containing Python, Kotlin, or Java code, then generate the graph again.</p>
                       </>
                     ) : (
