@@ -73,8 +73,8 @@ export default function GraphCanvas({
         data: { type: e.type },
         markerEnd: { type: MarkerType.ArrowClosed, color: st.color, width: 16, height: 16 },
         style: { stroke: st.color, strokeWidth: active ? 1.8 : 1, strokeDasharray: dashed, opacity: active ? 0.95 : 0.2 },
-        labelStyle: { fontSize: 10, fill: "#e2e8f0", fontWeight: 600 },
-        labelBgStyle: { fill: "rgba(15, 23, 42, 0.9)", stroke: "rgba(148, 163, 184, 0.2)", strokeWidth: 1 },
+        labelStyle: { fontSize: 10, fill: "var(--text)", fontWeight: 600 },
+        labelBgStyle: { fill: "var(--bg)", stroke: "var(--border)", strokeWidth: 1 },
         labelBgPadding: [6, 4],
       } as Edge;
     });
@@ -116,7 +116,7 @@ export default function GraphCanvas({
       onPaneClick={streaming ? undefined : () => onSelect(null)}
       proOptions={{ hideAttribution: true }}
     >
-      <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1e293b" />
+      <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="var(--canvas-dot)" />
       <Controls showInteractive={false} showZoom={false} showFitView={false} orientation="horizontal">
         <ControlButton onClick={() => rf.zoomIn({ duration: 150 })} title="Zoom in"><ZoomIn size={14} /></ControlButton>
         <ControlButton onClick={() => rf.zoomOut({ duration: 150 })} title="Zoom out"><ZoomOut size={14} /></ControlButton>
