@@ -100,7 +100,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .chat-welcome p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .chat-welcome strong { color: var(--text); font-weight: 600; }
 .chat-suggestions { width: min(100%, 380px); display: flex; gap: 8px; overflow-x: auto; padding: 2px 1px 8px; scroll-snap-type: x mandatory; scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
-.chat-suggestion { flex: 0 0 176px; min-height: 70px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); background: var(--panel); text-align: left; font-size: 12px; line-height: 1.45; transition: border-color 120ms, color 120ms, transform 120ms; scroll-snap-align: start; }
+.chat-suggestion { flex: 0 0 clamp(96px, 38%, 150px); min-height: 76px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); background: var(--panel); text-align: left; font-size: 12px; line-height: 1.45; transition: border-color 120ms, color 120ms, transform 120ms; scroll-snap-align: start; }
 .chat-suggestion:hover { border-color: #3ddc8477; color: var(--text); }
 .chat-suggestion:hover { transform: translateY(-1px); }
 .chat-messages { width: 100%; display: flex; flex-direction: column; gap: 12px; }
