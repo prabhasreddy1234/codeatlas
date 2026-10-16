@@ -83,7 +83,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .inspector-resizer { grid-column: 4; }
 .inspector { grid-column: 5; }
 .chat-widget { position: fixed; z-index: 30; right: 24px; bottom: 24px; }
-.chat-panel { position: absolute; right: 0; bottom: 74px; width: min(400px, calc(100vw - 32px)); height: min(600px, calc(100vh - 120px)); min-height: min(340px, calc(100vh - 100px)); display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); overflow: hidden; box-shadow: 0 18px 60px #0009; }
+.chat-panel { position: fixed; right: 24px; bottom: 80px; width: min(400px, calc(100vw - 32px)); height: min(600px, calc(100vh - 120px)); min-height: min(340px, calc(100vh - 100px)); display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); overflow: hidden; box-shadow: 0 18px 60px #0009; }
 .chat-header { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .chat-title { display: flex; align-items: center; gap: 10px; }
 .chat-header-actions { display: flex; align-items: center; gap: 4px; }
@@ -280,5 +280,5 @@ small.ok { color: var(--accent); }
   .header-right { margin-left: auto; }
   .ghost { padding: 6px 8px; }
   .chat-widget { right: 14px; bottom: 14px; }
-  .chat-panel { bottom: 68px; width: min(400px, calc(100vw - 28px)); height: min(600px, calc(100dvh - 100px)); min-height: min(340px, calc(100dvh - 80px)); }
+  .chat-panel { right: 14px; bottom: 70px; width: min(400px, calc(100vw - 28px)); height: min(600px, calc(100dvh - 100px)); min-height: min(340px, calc(100dvh - 80px)); }
 }
