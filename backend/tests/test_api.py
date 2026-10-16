@@ -106,7 +106,14 @@ def test_generate_and_cache(client, remote_repo):
     assert "MainActivity" in {n["name"] for n in nb["nodes"]}
     sr = client.get("/api/graphs/acme/sample/search", params={"branch": "main", "q": "fetchusers"}).json()
     assert any(x["name"] == "fetchUsers" for x in sr["results"])
-    assert client.get("/api/graphs/acme/sample/export", params={"branch": "main"}).status_code == 200
+    exported = client.get("/api/graphs/acme/sample/export", params={"branch": "main"})
+    assert exported.status_code == 200
+    document = exported.json()
+    assert document["schema_version"] == 1
+    assert document["repository"]["owner"] == "acme" and document["repository"]["name"] == "sample"
+    assert document["branch"] == "main" and document["commit_sha"] == s["commit_sha"]
+    assert len(document["nodes"]) == g["stats"]["nodes"] > len(g["overview"]["nodes"])
+    assert len(document["edges"]) == g["stats"]["edges"]
 
 
 def test_graph_stream_sends_latest_job_graph(client, remote_repo):
