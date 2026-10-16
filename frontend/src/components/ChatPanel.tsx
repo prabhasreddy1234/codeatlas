@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { GitBranch, MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
+import { MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import type { GEdge, GNode, GraphMeta } from "../types/graph";
 
 interface Props {
   repository: string | null;
-  branch: string | null;
   graph: GraphMeta | null;
   nodes: GNode[];
   edges: GEdge[];
@@ -21,12 +20,6 @@ const suggestions = [
   "Show me the main entry points",
   "How are the key components connected?",
 ];
-
-const introduction: ChatMessage = {
-  id: 0,
-  role: "assistant",
-  content: "Ask about this repository and I’ll look for an answer in its loaded code graph.",
-};
 
 function nodeLabel(node: GNode): string {
   const location = node.file_path
@@ -131,13 +124,14 @@ function answerQuestion(question: string, graph: GraphMeta | null, nodes: GNode[
   return "I can answer from the loaded graph about its structure, likely entry points, relationships, and named code elements. Try one of the suggested questions or ask about a class, function, or file.";
 }
 
-export default function ChatPanel({ repository, branch, graph, nodes, edges }: Props) {
+export default function ChatPanel({ repository, graph, nodes, edges }: Props) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([introduction]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messageId = useRef(1);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const projectName = graph?.repository.name ?? repository?.split("/").pop() ?? "your project";
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -199,7 +193,7 @@ export default function ChatPanel({ repository, branch, graph, nodes, edges }: P
                 type="button"
                 aria-label="Start a new chat"
                 title="Start a new chat"
-                onClick={() => { setMessages([introduction]); setDraft(""); }}
+                onClick={() => { setMessages([]); setDraft(""); }}
               >
                 <RotateCcw size={15} />
               </button>
@@ -215,19 +209,12 @@ export default function ChatPanel({ repository, branch, graph, nodes, edges }: P
             </div>
           </header>
 
-          <div className="chat-context">
-            <GitBranch size={14} />
-            {repository && branch
-              ? <span><b>{repository}</b> · {branch}</span>
-              : <span>{graph ? "Code graph loaded" : "Select a repository to get started"}</span>}
-          </div>
-
           <div className="chat-body" ref={bodyRef} role="log" aria-label="Chat messages" aria-live="polite">
-            {messages.length === 1 && (
+            {messages.length === 0 && (
               <div className="chat-welcome">
                 <span className="chat-welcome-icon"><Sparkles size={18} /></span>
-                <h3>Your codebase, easier to explore</h3>
-                <p>Ask a question or choose a prompt to explore the loaded code graph.</p>
+                <h3>Welcome!</h3>
+                <p>You can ask me anything about <strong>{projectName}</strong>.</p>
               </div>
             )}
             <div className="chat-messages">
@@ -238,7 +225,7 @@ export default function ChatPanel({ repository, branch, graph, nodes, edges }: P
                 </article>
               ))}
             </div>
-            {messages.length === 1 && (
+            {messages.length === 0 && (
               <div className="chat-suggestions" aria-label="Suggested questions">
                 {suggestions.map((suggestion) => (
                   <button

@@ -501,7 +501,6 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
       </section>
       <ChatPanel
         repository={repo?.full_name ?? null}
-        branch={branch?.name ?? null}
         graph={meta}
         nodes={[...nodes.values()]}
         edges={[...edges.values()]}
