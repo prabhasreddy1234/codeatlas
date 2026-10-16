@@ -167,6 +167,13 @@ small.ok { color: var(--accent); }
 .canvas-shell:fullscreen { display: flex; flex-direction: column; width: 100vw; height: 100vh; background: var(--bg); }
 .canvas { height: 100%; min-height: 0; position: relative; }
 .fullscreen-toggle { position: absolute; z-index: 5; top: 10px; right: 10px; background: var(--panel); }
+.json-toggle { position: absolute; z-index: 5; top: 10px; left: 10px; background: var(--panel); }
+.json-viewer-backdrop { position: fixed; z-index: 50; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: #020617aa; }
+.json-viewer { display: flex; flex-direction: column; width: min(900px, 100%); height: min(760px, 100%); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--bg); box-shadow: 0 24px 80px #0008; }
+.json-viewer-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.json-viewer-header h2 { margin: 0; font-size: 15px; }
+.json-viewer-header p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.json-viewer pre { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 18px; color: var(--text); font: 12px/1.6 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre; tab-size: 2; }
 .canvas-empty { height: 100%; display: flex; align-items: center; justify-content: center; padding: 32px; text-align: center; background: radial-gradient(ellipse at center, var(--panel) 0%, var(--bg) 72%); }
 .canvas-empty > div { max-width: 520px; }
 .canvas-empty h2 { margin: 0 0 10px; font-size: 20px; }

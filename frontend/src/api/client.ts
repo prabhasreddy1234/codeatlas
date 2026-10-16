@@ -1,5 +1,5 @@
 import type {
-  Branch, GraphChunk, GraphMeta, JobStatus, Me, NodeDetails, Repo, GNode,
+  Branch, GraphChunk, GraphDocument, GraphMeta, JobStatus, Me, NodeDetails, Repo, GNode,
 } from "../types/graph";
 
 export class ApiError extends Error {
@@ -52,6 +52,8 @@ export const api = {
     request<JobStatus>(`/api/graphs/${owner}/${repo}/status?${q({ branch })}`),
   graph: (owner: string, repo: string, branch: string, limit = 120) =>
     request<GraphMeta>(`/api/graphs/${owner}/${repo}?${q({ branch, limit })}`),
+  graphExport: (owner: string, repo: string, branch: string) =>
+    request<GraphDocument>(`/api/graphs/${owner}/${repo}/export?${q({ branch })}`),
   search: (owner: string, repo: string, branch: string, text: string) =>
     request<{ results: GNode[] }>(`/api/graphs/${owner}/${repo}/search?${q({ branch, q: text })}`).then((r) => r.results),
   node: (owner: string, repo: string, branch: string, id: string) =>

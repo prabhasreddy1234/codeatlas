@@ -4,11 +4,11 @@ import {
 } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import {
-  ArrowLeftRight, ArrowDownUp, Expand, PanelLeftClose, PanelLeftOpen, PanelRightClose,
-  PanelRightOpen, Search, Shrink,
+  ArrowLeftRight, ArrowDownUp, Expand, FileJson, PanelLeftClose, PanelLeftOpen, PanelRightClose,
+  PanelRightOpen, Search, Shrink, X,
 } from "lucide-react";
 import { api, ApiError } from "../api/client";
-import type { Branch, EdgeType, GEdge, GNode, GraphMeta, JobStatus, NodeDetails, Repo } from "../types/graph";
+import type { Branch, EdgeType, GEdge, GNode, GraphDocument, GraphMeta, JobStatus, NodeDetails, Repo } from "../types/graph";
 import type { Direction } from "../graph/layout";
 import { ALL_EDGE_TYPES, DEFAULT_EDGE_TYPES, EDGE_STYLE, NODE_FILTERS } from "../graph/style";
 import RepoPanel from "../components/RepoPanel";
@@ -44,6 +44,8 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   const [busy, setBusy] = useState(false);
 
   const [meta, setMeta] = useState<GraphMeta | null>(null);
+  const [graphDocument, setGraphDocument] = useState<GraphDocument | null>(null);
+  const [showGraphJson, setShowGraphJson] = useState(false);
   const [nodes, setNodes] = useState<Map<string, GNode>>(new Map());
   const [edges, setEdges] = useState<Map<string, GEdge>>(new Map());
   const [focus, setFocus] = useState<Set<string> | null>(null);
@@ -73,6 +75,15 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!showGraphJson) return;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setShowGraphJson(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showGraphJson]);
+
+  useEffect(() => {
     let cancelled = false;
     setReposLoading(true);
     api.repos(visibility)
@@ -94,7 +105,8 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
     streamFrame.current = null;
     pendingStreamNodes.current.clear();
     pendingStreamEdges.current.clear();
-    setMeta(null); setNodes(new Map()); setEdges(new Map()); setFocus(null);
+    setMeta(null); setGraphDocument(null); setShowGraphJson(false);
+    setNodes(new Map()); setEdges(new Map()); setFocus(null);
     setSelectedId(null); setDetails(null); setResults([]); setMatchIds(new Set()); setQuery("");
   };
 
@@ -124,12 +136,13 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
   };
 
   const loadGraph = useCallback(async (o: string, n: string, b: string) => {
-    const g = await api.graph(o, n, b);
+    const [g, document] = await Promise.all([api.graph(o, n, b), api.graphExport(o, n, b)]);
     if (streamFrame.current !== null) cancelAnimationFrame(streamFrame.current);
     streamFrame.current = null;
     pendingStreamNodes.current.clear();
     pendingStreamEdges.current.clear();
     setMeta(g);
+    setGraphDocument(document);
     setNodes(new Map(g.overview.nodes.map((x) => [x.id, x])));
     setEdges(new Map(g.overview.edges.map((x) => [x.id, x])));
     setFocus(null); setSelectedId(null); setDetails(null);
@@ -429,6 +442,12 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
                 {fullscreen ? <Shrink size={15} /> : <Expand size={15} />}
                 {fullscreen ? "Exit fullscreen" : "Fullscreen"}
               </button>
+              {graphDocument && (
+                <button className="ghost json-toggle" onClick={() => setShowGraphJson(true)}
+                        aria-label="Show graph as JSON" title="Show the generated graph JSON">
+                  <FileJson size={15} /> Show as JSON
+                </button>
+              )}
               <div className="canvas">
               {visNodes.length === 0 ? (
                 <div className="canvas-empty">
@@ -465,6 +484,24 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
                 </ReactFlowProvider>
               )}
               </div>
+              {showGraphJson && graphDocument && (
+                <div className="json-viewer-backdrop" onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) setShowGraphJson(false);
+                }}>
+                  <section className="json-viewer" role="dialog" aria-modal="true" aria-labelledby="json-viewer-title">
+                    <header className="json-viewer-header">
+                      <div>
+                        <h2 id="json-viewer-title">Graph JSON</h2>
+                        <p>{graphDocument.repository.owner}/{graphDocument.repository.name} · {graphDocument.branch}</p>
+                      </div>
+                      <button className="chat-icon-button" type="button" onClick={() => setShowGraphJson(false)} aria-label="Close JSON viewer" title="Close">
+                        <X size={17} />
+                      </button>
+                    </header>
+                    <pre>{JSON.stringify(graphDocument, null, 2)}</pre>
+                  </section>
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -502,8 +539,8 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
       <ChatPanel
         repository={repo?.full_name ?? null}
         graph={meta}
-        nodes={[...nodes.values()]}
-        edges={[...edges.values()]}
+        nodes={graphDocument?.nodes ?? [...nodes.values()]}
+        edges={graphDocument?.edges ?? [...edges.values()]}
       />
     </div>
   );

@@ -61,6 +61,19 @@ export interface GraphMeta {
   overview: GraphChunk;
 }
 
+export interface GraphDocument {
+  schema_version: number;
+  repository: GraphMeta["repository"];
+  branch: string;
+  commit_sha: string;
+  indexed_at: string;
+  analyzer: GraphMeta["analyzer"];
+  stats: GraphMeta["stats"];
+  warnings: string[];
+  nodes: GNode[];
+  edges: GEdge[];
+}
+
 export interface EdgeView extends GEdge {
   other: { id: string; name: string; type: NodeType; qualified_name: string } | null;
 }
