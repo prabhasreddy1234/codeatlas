@@ -20,7 +20,7 @@ export default function Header({ me, repo, branch, theme, onToggleTheme, onLogou
         {branch && <span className="pill alt">{branch}</span>}
       </div>
       <div className="header-right">
-        <button className="theme-toggle" onClick={onToggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+        <button className="theme-toggle" onClick={onToggleTheme} aria-pressed={theme === "light"} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
           {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           <span>{theme === "dark" ? "Light" : "Dark"} mode</span>
         </button>
