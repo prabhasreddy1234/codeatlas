@@ -14,16 +14,31 @@ export default function ConnectPage({ me }: { me: Me | null }) {
   return (
     <div className="connect">
       <div className="connect-card">
-        <Network size={44} color="#3ddc84" />
-        <h1>CodeAtlas</h1>
+        <div className="brand-mark"><Network size={44} /></div>
+        <p className="eyebrow">Code intelligence for software teams</p>
+        <h1>Map dependencies before they become hidden risk.</h1>
         <p>Deterministic code graphs for Python and Android projects. Python, Kotlin, and Java source are analyzed locally — no LLM or AI APIs.</p>
-        <div className="logos"><PythonLogo size={26} /><AndroidLogo size={26} /><KotlinLogo size={26} /><JavaLogo size={26} /></div>
+
+        <div className="logos" aria-label="Supported languages">
+          <PythonLogo size={26} />
+          <AndroidLogo size={26} />
+          <KotlinLogo size={26} />
+          <JavaLogo size={26} />
+        </div>
+
+        <div className="feature-grid">
+          <div className="feature-item"><strong>Deterministic</strong><span>Static graph analysis, no model guesses.</span></div>
+          <div className="feature-item"><strong>Focused</strong><span>Entry points, callers, dependencies, and members.</span></div>
+          <div className="feature-item"><strong>Safe</strong><span>Repository contents are parsed locally and never executed.</span></div>
+        </div>
+
         {err && <div className="alert error">{ERRORS[err] ?? "Authentication failed."}</div>}
         {me && !me.oauth_configured && (
           <div className="alert error">GitHub OAuth is not configured on the backend. Add GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET to .env (see README).</div>
         )}
+
         <a className="btn primary" href="/auth/github"><GithubLogo size={16} color="currentColor" /> Connect GitHub</a>
-        <small>Browse public and private repositories from separate filters in CodeAtlas. GitHub's <code>repo</code> permission is requested to access private repositories; CodeAtlas only reads repository contents, and your token stays on the server.</small>
+        <small>Browse public and private repositories from separate filters in CodeAtlas. GitHub's <code>repo</code> permission is requested for private access; CodeAtlas only reads repository contents, and your token remains server-side.</small>
       </div>
     </div>
   );

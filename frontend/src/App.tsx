@@ -35,8 +35,28 @@ export default function App() {
     window.location.href = "/";
   };
 
-  if (down) return <div className="connect"><div className="connect-card"><h1>CodeAtlas</h1><div className="alert error">Cannot reach the backend on port 8000. Start it first (see README).</div></div></div>;
-  if (!me) return <div className="connect"><div className="connect-card">Loading…</div></div>;
+  if (down) return (
+    <div className="connect">
+      <div className="connect-card">
+        <div className="brand-mark"><Network size={42} /></div>
+        <p className="eyebrow">Service unavailable</p>
+        <h1>CodeAtlas is offline</h1>
+        <p>Cannot reach the backend on port 8000. Start it first, then refresh this page.</p>
+        <div className="alert error">The API was not reachable on localhost:8000. Check the backend process and README instructions.</div>
+        <a className="btn primary" href="/">Reload</a>
+      </div>
+    </div>
+  );
+  if (!me) return (
+    <div className="connect">
+      <div className="connect-card loading-shell">
+        <div className="brand-mark"><Network size={42} /></div>
+        <p className="eyebrow">Preparing workspace</p>
+        <h1>Loading CodeAtlas…</h1>
+        <div className="loading-bar"><span /></div>
+      </div>
+    </div>
+  );
   if (!me.authenticated) return <><Header me={me} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} onLogout={logout} /><ConnectPage me={me} /></>;
   return (
     <div className="app">
