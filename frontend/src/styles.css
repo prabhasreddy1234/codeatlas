@@ -28,7 +28,10 @@
 }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
-body { background: var(--bg); transition: background-color 160ms ease, color 160ms ease; }
+body {
+  background: radial-gradient(circle at top, rgba(61, 220, 132, 0.12), transparent 28%), var(--bg);
+  transition: background-color 160ms ease, color 160ms ease;
+}
 code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
 .muted { color: var(--muted); font-size: 12px; }
 .pad { padding: 8px; }
@@ -36,7 +39,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:
 
 button { font: inherit; color: inherit; cursor: pointer; }
 .btn, .ghost { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); text-decoration: none; color: var(--text); font-size: 13px; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease; }
-.btn.primary { background: var(--accent); color: var(--accent-foreground); border-color: var(--accent); font-weight: 600; justify-content: center; }
+.btn.primary { background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 82%, #000 18%)); color: var(--accent-foreground); border-color: var(--accent); font-weight: 600; justify-content: center; }
 .btn:disabled, .ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 .ghost { background: transparent; padding: 6px 10px; }
 .ghost:hover, .btn:hover:not(.primary) { background: var(--panel2); }
@@ -46,8 +49,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .icon-btn { margin-left: auto; background: none; border: none; color: var(--muted); }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.header { display: flex; align-items: center; gap: 16px; min-height: 58px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--panel); box-shadow: 0 2px 12px #0000000a; }
+.header { display: flex; align-items: center; gap: 16px; min-height: 58px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: rgba(17, 26, 46, 0.82); backdrop-filter: blur(12px); box-shadow: 0 2px 12px rgba(15, 23, 42, 0.12); }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
+.brand-mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 54px; height: 54px;
+  border-radius: 16px; background: linear-gradient(135deg, rgba(61, 220, 132, 0.16), rgba(125, 211, 252, 0.12));
+  border: 1px solid rgba(61, 220, 132, 0.28); color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
 .header-mid { flex: 1; display: flex; gap: 8px; }
 .header-right { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .theme-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: var(--panel2); font-size: 12px; transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease; }
@@ -58,15 +67,41 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .status.ok { color: var(--accent); } .status.off { color: var(--muted); }
 .avatar { width: 24px; height: 24px; border-radius: 50%; }
 
-.connect { display: flex; justify-content: center; align-items: center; min-height: calc(100% - 50px); padding: 24px; }
-.connect-card { max-width: 460px; width: 100%; display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 32px; }
+.connect { display: flex; justify-content: center; align-items: center; min-height: calc(100% - 50px); padding: 24px; background: radial-gradient(circle at top, rgba(61, 220, 132, 0.08), transparent 30%); }
+.connect-card {
+  max-width: 580px; width: 100%; display: flex; flex-direction: column; gap: 14px; align-items: stretch;
+  text-align: center; background: rgba(17, 26, 46, 0.82); border: 1px solid var(--border); border-radius: 22px;
+  padding: 32px; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24); backdrop-filter: blur(12px);
+}
 .connect-card > svg { align-self: center; }
-.connect-card h1 { margin: 0; }
+.connect-card h1 { margin: 0; font-size: clamp(2rem, 4vw, 3rem); line-height: 1.05; }
 .connect-card p { color: var(--muted); font-size: 14px; margin: 0; }
 .connect-card small { color: var(--muted); }
-.logos { display: flex; gap: 14px; justify-content: center; }
+.eyebrow {
+  margin: 0; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; font-weight: 700;
+}
+.logos { display: flex; gap: 14px; justify-content: center; align-items: center; padding: 4px 0 8px; }
+.feature-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 4px;
+}
+.feature-item {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px 10px; border: 1px solid var(--border); border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4); text-align: left;
+}
+.feature-item strong { font-size: 12px; color: var(--text); }
+.feature-item span { font-size: 11px; color: var(--muted); line-height: 1.5; }
 .alert { padding: 8px 12px; border-radius: 8px; font-size: 13px; text-align: left; }
 .alert.error { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); }
+.loading-shell { align-items: center; }
+.loading-bar { width: min(220px, 100%); height: 10px; border-radius: 999px; background: rgba(148, 163, 184, 0.18); overflow: hidden; }
+.loading-bar span {
+  display: block; width: 42%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #7dd3fc);
+  animation: pulseBar 1.2s ease-in-out infinite alternate;
+}
+@keyframes pulseBar {
+  from { transform: translateX(-6%); opacity: 0.85; }
+  to { transform: translateX(150%); opacity: 1; }
+}
 
 .dashboard-split { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
 .dashboard-content { flex: 1; width: 100%; max-width: 100%; }
