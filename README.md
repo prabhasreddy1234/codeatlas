@@ -1,99 +1,162 @@
 # CodeAtlas
 
-Deterministic code graphs for Python and Android projects on GitHub. Sign in with GitHub, pick a repository and branch, and CodeAtlas analyzes Python, Kotlin, and Java source and shows an interactive, layered graph. **No LLM or AI API is used anywhere.**
+CodeAtlas is a local-first code intelligence tool for Python and Android repositories. It authenticates with GitHub, analyzes source code into a deterministic dependency graph, and presents the result as an interactive map of entry points, calls, dependencies, and members.
 
-- Backend: Python 3.11+, FastAPI, Python AST, Tree-sitter, Git CLI, SQLite + JSON files
-- Frontend: React, TypeScript, Vite, React Flow (`@xyflow/react`), Dagre layout, Lucide + simple-icons
+The platform is designed for code exploration and architectural understanding without relying on LLMs or external AI APIs. It works entirely with local parsing, repository metadata, and graph generation.
+
+## Why CodeAtlas
+
+- Understand the structure of a codebase before making broad refactors.
+- Trace how modules, classes, and functions connect across Python, Java, and Kotlin.
+- Inspect a repository graph without executing project code.
+- Keep analysis deterministic and explainable instead of model-driven.
+
+## Key capabilities
+
+- GitHub OAuth sign-in with repository selection and branch browsing
+- Static analysis of Python, Java, and Kotlin project files
+- Graph edges labeled as confirmed, inferred, external, or unresolved
+- Repository-level filtering for public and private access
+- Interactive inspection of nodes, neighbors, and graph metadata
+- Browser-based visualization using a React Flow canvas
+
+## Architecture
+
+- Backend: Python 3.11+, FastAPI, SQLite, Git CLI, static AST-based analysis
+- Frontend: React, TypeScript, Vite, React Flow, Lucide icons, simple-icons
+- Storage: cached repository data and generated graph JSON under `.codeatlas-data/`
+
+## Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Git
 
 ## Quick start
 
-Prerequisites: Python 3.11+, Node 18+, git.
+Start with the bundled script:
 
 ```bash
-cp .env.example .env        # then fill in GitHub credentials (see below)
-./dev.sh                    # creates the venv, installs deps, starts both servers
+cp .env.example .env
+./dev.sh
 ```
 
-Or manually:
+The script prepares the Python virtual environment, installs dependencies, and starts both the backend and frontend services.
+
+### Manual setup
+
+Backend:
 
 ```bash
-# Backend
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:create_app --factory --reload --port 8000
+```
 
-# Frontend (new terminal)
+Frontend (new terminal):
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-- Web UI: http://localhost:5173
-- API: http://localhost:8000 (interactive docs: http://localhost:8000/docs)
+Then open:
 
-Always open the UI via `http://localhost:5173` (the Vite dev server proxies `/api` and `/auth` to the backend, so cookies stay same-origin).
+- UI: http://localhost:5173
+- API docs: http://localhost:8000/docs
 
-## GitHub OAuth App setup
+The Vite dev server proxies `/api` and `/auth` to the backend, so browser cookies remain same-origin and authentication works correctly when you use the UI on port 5173.
 
-1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**.
-2. Fill in:
-   - **Application name:** CodeAtlas (local)
-   - **Homepage URL:** `http://localhost:5173`
-   - **Authorization callback URL:** `http://localhost:8000/auth/github/callback`
-3. Register, then **Generate a new client secret**.
-4. Put the values in `.env`:
-   ```
-   GITHUB_CLIENT_ID=...
-   GITHUB_CLIENT_SECRET=...
-   ```
-5. Restart the backend.
+## GitHub OAuth setup
 
-**Permissions.** The single *Connect GitHub* button requests the `repo` scope, which GitHub OAuth Apps require for private repository access (it is read/write-capable at GitHub's level; CodeAtlas only reads). The dashboard shows public repositories by default; use its **Private** filter to show private repositories. Tokens are encrypted server-side and never sent to the browser. For organization repos, the org may need to approve the OAuth app.
+1. Go to GitHub → Settings → Developer settings → OAuth Apps → New OAuth App.
+2. Configure the app with:
+   - Application name: `CodeAtlas (local)`
+   - Homepage URL: `http://localhost:5173`
+   - Authorization callback URL: `http://localhost:8000/auth/github/callback`
+3. Save the app and generate a client secret.
+4. Add the values to your `.env` file:
 
-## How it works
+```bash
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+```
 
-1. OAuth with a signed `state` cookie; sessions are opaque HttpOnly cookies, tokens are Fernet-encrypted in SQLite.
-2. POST requests require an `X-CSRF-Token` header and an allowed `Origin`. Disconnecting clears the local CodeAtlas session and revokes the GitHub OAuth grant, so reconnecting sends you through GitHub authorization again.
-3. Generate: verify branch via GitHub API → shallow clone/fetch into `.codeatlas-data/repos` → checkout exact branch → record commit SHA → analyze.
-4. Graphs are stored as JSON under `.codeatlas-data/graphs/{owner}/{repo}/{branch}/{sha}.json`. If the commit is unchanged, the stored graph is reused (use *Re-index* to force).
-5. The UI shows a focused overview of code entry points and their neighbors; expand callers, dependencies, or members per node.
+5. Restart the backend service.
 
-Repository code is treated as untrusted: it is only parsed, never executed; git hooks are disabled, symlinks are skipped, owner/repo/branch/paths are validated, and files over the size limit are skipped.
+### Permissions
 
-## Tests
+The Connect GitHub flow requests the `repo` scope, which GitHub requires for private repository access. CodeAtlas reads repository contents and does not execute code from the repository. Tokens are encrypted server-side and are never exposed to the browser.
+
+## How the analysis works
+
+1. The app authenticates the user and validates the GitHub OAuth state.
+2. It fetches repository metadata and checks out the selected branch.
+3. It shallow clones or reuses a cached repository under `.codeatlas-data/repos`.
+4. It parses source files and builds a code graph from the repository structure.
+5. It stores results as JSON in `.codeatlas-data/graphs/` and reuses cached output when the commit is unchanged.
+
+Repository content is treated as untrusted: CodeAtlas only parses files, never executes them. Git hooks are disabled, symlinks are skipped, path inputs are validated, and oversized files are ignored.
+
+## Development and validation
+
+Run the project checks locally:
 
 ```bash
 cd backend && source .venv/bin/activate && python -m pytest -q
 cd frontend && npm run typecheck && npm run build
 ```
 
-## Static-analysis limitations
+## Current static-analysis limitations
 
-Resolution is syntax- and index-based, not compiler-grade. CodeAtlas marks each edge `confirmed`, `inferred`, `external` or `unresolved` and never invents links for unresolvable targets.
+CodeAtlas is intentionally deterministic and syntax-driven rather than compiler-grade. It labels graph edges as `confirmed`, `inferred`, `external`, or `unresolved` and does not infer links when the target cannot be resolved confidently.
 
-- No type inference beyond declared types: overloads are matched by arity only; chained call receivers are unresolved.
-- Python is parsed with the standard-library AST. Classes, methods, functions, annotations, imports, inheritance, constructor calls, and statically traceable calls are graphed; dynamic dispatch, reflection, and runtime import behavior are not evaluated.
-- Interface/abstract calls link to the interface method, not to implementations (no dynamic-dispatch resolution).
-- Reflection, service locators and Koin are not analysed. Dagger/Hilt `@Provides`/`@Binds` modules are not analysed; only `@Inject` fields/constructor parameters are linked.
-- Navigation: explicit `Intent(...::class)` and navigation-graph XML actions only. `findNavController().navigate(...)` and Compose `NavHost` routes are not resolved.
-- AndroidManifest.xml is not parsed. Extension functions are matched by name (inferred).
-- Kotlin import aliases are partially supported. The Kotlin grammar can mis-parse unusual single-line constructs.
-- Android roles come from the superclass/annotation (including through in-repo hierarchy); the Repository role may be name-based and is labelled inferred.
-- Structured for stronger semantics later: `SemanticProvider` in `backend/app/analyzer/resolver.py` is the hook for Kotlin compiler or Java tooling backends.
-- The real GitHub OAuth round-trip requires your own OAuth App credentials; automated tests use a fake GitHub client and a local bare git remote.
+Known limitations include:
+
+- No deep type inference beyond declared types
+- Overload resolution by arity only
+- Limited handling of chained call receivers
+- Python analysis via the standard-library AST
+- No evaluation of dynamic dispatch, reflection, or runtime import behavior
+- Partial handling of Android navigation and dependency-injection patterns
+- Simplified matching for Kotlin extension functions and import aliases
+- Repository role labels that may be inferred rather than fully semantic
+
+These limits are documented in the code paths and are intentionally explicit to preserve clarity and trust in the generated graph.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| "GitHub OAuth is not configured" | Set `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` in `.env`, restart backend |
-| `redirect_uri` mismatch | Callback URL must be exactly `http://localhost:8000/auth/github/callback` |
-| Invalid state / login loop | Use `http://localhost:5173` consistently (not 127.0.0.1); clear cookies |
-| Private repos missing | Reconnect with *Connect GitHub* to grant the required access; approve the org if applicable |
-| "Cannot reach backend" | Start uvicorn on port 8000 |
-| `Attribute "app" not found` | Use `--factory`: `uvicorn app.main:create_app --factory` |
-| Clone/checkout fails | Ensure `git` is installed and the branch exists; see error in UI |
-| Empty graph | The repo may contain no Python, Kotlin, or Java sources outside ignored dirs (`build`, `.gradle`, `generated`, …) |
-| Reset everything | Stop servers, delete `.codeatlas-data/` |
+| GitHub OAuth is not configured | Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.env` and restart the backend |
+| Redirect URI mismatch | Use exactly `http://localhost:8000/auth/github/callback` |
+| Invalid state or login loop | Use `http://localhost:5173` consistently and clear cookies |
+| Private repos are missing | Reconnect with GitHub and approve the app for the relevant organization |
+| Backend is unreachable | Start the API on port 8000 |
+| `Attribute "app" not found` | Use `uvicorn app.main:create_app --factory` |
+| Clone or checkout fails | Ensure `git` is installed and the branch exists |
+| Empty graph | The repository may have no relevant Python, Kotlin, or Java sources outside ignored directories |
+| Reset everything | Stop the servers and remove `.codeatlas-data/` |
+
+## Project structure
+
+```text
+backend/          Python API and analysis engine
+frontend/         React UI and visualization layer
+README.md         Project overview and setup guide
+dev.sh            Local development bootstrap
+```
+
+## Security and trust model
+
+- Repository content is parsed but never executed.
+- OAuth tokens are stored encrypted on the server.
+- Only configured, validated repository paths are processed.
+- Local caches under `.codeatlas-data/` are reused when possible to reduce redundant analysis.
+
+## License
+
+This project is distributed under the repository's existing license terms. See the repository root for the applicable license file.

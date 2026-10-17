@@ -3,6 +3,7 @@
   --bg: #0b1120; --panel: #111a2e; --panel2: #0f172a; --border: #1e293b; --text: #e2e8f0;
   --muted: #94a3b8; --accent: #3ddc84; --accent-foreground: #05210f; --danger: #f87171; --link: #7dd3fc;
   --canvas-dot: #1e293b; --node-bg: rgba(15, 23, 42, 0.96); --node-border: rgba(148, 163, 184, 0.2);
+  --glass: rgba(17, 26, 46, 0.82); --soft-panel: rgba(15, 23, 42, 0.42);
   --shadow: 0 8px 22px rgba(15, 23, 42, 0.45); --node-hover-shadow: 0 12px 28px rgba(15, 23, 42, 0.6);
   --selection-glow: rgba(61, 220, 132, 0.75);
   --error-bg: #7f1d1d44; --error-border: #b91c1c; --error-text: #fecaca;
@@ -18,6 +19,7 @@
   --bg: #f4f7fb; --panel: #ffffff; --panel2: #f1f5f9; --border: #dbe3ed; --text: #172033;
   --muted: #64748b; --accent: #16834b; --accent-foreground: #ffffff; --danger: #dc2626; --link: #0369a1;
   --canvas-dot: #b8c4d3; --node-bg: #ffffff; --node-border: #cbd5e1;
+  --glass: rgba(255, 255, 255, 0.76); --soft-panel: rgba(255, 255, 255, 0.58);
   --shadow: 0 8px 22px rgba(15, 23, 42, 0.14); --node-hover-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
   --selection-glow: rgba(22, 131, 75, 0.55);
   --error-bg: #fef2f2; --error-border: #fecaca; --error-text: #991b1b;
@@ -49,7 +51,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .icon-btn { margin-left: auto; background: none; border: none; color: var(--muted); }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.header { display: flex; align-items: center; gap: 16px; min-height: 58px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: rgba(17, 26, 46, 0.82); backdrop-filter: blur(12px); box-shadow: 0 2px 12px rgba(15, 23, 42, 0.12); }
+.header { display: flex; align-items: center; gap: 16px; min-height: 58px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--glass); backdrop-filter: blur(12px); box-shadow: 0 2px 12px rgba(15, 23, 42, 0.12); }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
 .brand-mark {
   display: inline-flex; align-items: center; justify-content: center; width: 54px; height: 54px;
@@ -70,7 +72,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .connect { display: flex; justify-content: center; align-items: center; min-height: calc(100% - 50px); padding: 24px; background: radial-gradient(circle at top, rgba(61, 220, 132, 0.08), transparent 30%); }
 .connect-card {
   max-width: 580px; width: 100%; display: flex; flex-direction: column; gap: 14px; align-items: stretch;
-  text-align: center; background: rgba(17, 26, 46, 0.82); border: 1px solid var(--border); border-radius: 22px;
+  text-align: center; background: var(--glass); border: 1px solid var(--border); border-radius: 22px;
   padding: 32px; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24); backdrop-filter: blur(12px);
 }
 .connect-card > svg { align-self: center; }
@@ -86,7 +88,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .feature-item {
   display: flex; flex-direction: column; gap: 4px; padding: 12px 10px; border: 1px solid var(--border); border-radius: 12px;
-  background: rgba(15, 23, 42, 0.4); text-align: left;
+  background: var(--soft-panel); text-align: left;
 }
 .feature-item strong { font-size: 12px; color: var(--text); }
 .feature-item span { font-size: 11px; color: var(--muted); line-height: 1.5; }
