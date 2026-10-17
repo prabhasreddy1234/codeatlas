@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Network } from "lucide-react";
 import { api, setCsrf } from "./api/client";
 import type { Me } from "./types/graph";
 import Header from "./components/Header";
