@@ -17,8 +17,8 @@
   color-scheme: light;
   --bg: #f4f7fb; --panel: #ffffff; --panel2: #f1f5f9; --border: #dbe3ed; --text: #172033;
   --muted: #64748b; --accent: #16834b; --accent-foreground: #ffffff; --danger: #dc2626; --link: #0369a1;
-  --canvas-dot: #cbd5e1; --node-bg: rgba(255, 255, 255, 0.98); --node-border: rgba(71, 85, 105, 0.2);
-  --shadow: 0 8px 22px rgba(15, 23, 42, 0.1); --node-hover-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  --canvas-dot: #b8c4d3; --node-bg: #ffffff; --node-border: #cbd5e1;
+  --shadow: 0 8px 22px rgba(15, 23, 42, 0.14); --node-hover-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
   --selection-glow: rgba(22, 131, 75, 0.55);
   --error-bg: #fef2f2; --error-border: #fecaca; --error-text: #991b1b;
   --badge-confirmed-bg: #dcfce7; --badge-confirmed-text: #166534;

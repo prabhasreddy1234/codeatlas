@@ -6,7 +6,7 @@ import {
 import { Maximize, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import type { GEdge, GNode } from "../types/graph";
 import { layout, type Direction } from "../graph/layout";
-import { EDGE_STYLE } from "../graph/style";
+import { EDGE_STYLE, graphColor } from "../graph/style";
 import CodeNode, { type CodeFlowNode } from "./CodeNode";
 
 const nodeTypes = { code: CodeNode };
@@ -65,14 +65,21 @@ export default function GraphCanvas({
     const ids = new Set(nodes.map((n) => n.id));
     return edges.filter((e) => e.target && ids.has(e.source) && ids.has(e.target)).map((e) => {
       const st = EDGE_STYLE[e.type];
+      const lightTheme = document.documentElement.dataset.theme === "light";
+      const color = graphColor(st.color);
       const active = !selectedId || e.source === selectedId || e.target === selectedId;
       const dashed = e.status === "inferred" ? "5 4" : st.dash;
       return {
         id: e.id, source: e.source, target: e.target as string, type: "smoothstep",
         label: e.count > 1 && e.type !== "CONTAINS" ? `${st.label} ×${e.count}` : undefined,
         data: { type: e.type },
-        markerEnd: { type: MarkerType.ArrowClosed, color: st.color, width: 16, height: 16 },
-        style: { stroke: st.color, strokeWidth: active ? 1.8 : 1, strokeDasharray: dashed, opacity: active ? 0.95 : 0.2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
+        style: {
+          stroke: color,
+          strokeWidth: active ? (lightTheme ? 2 : 1.8) : (lightTheme ? 1.4 : 1),
+          strokeDasharray: dashed,
+          opacity: active ? 0.95 : (lightTheme ? 0.34 : 0.2),
+        },
         labelStyle: { fontSize: 10, fill: "var(--text)", fontWeight: 600 },
         labelBgStyle: { fill: "var(--bg)", stroke: "var(--border)", strokeWidth: 1 },
         labelBgPadding: [6, 4],

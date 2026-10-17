@@ -29,6 +29,15 @@ const lucide = (I: Lucide) => ({ size = 18, color }: IconProps) => <I size={size
 
 export interface Kind { key: string; label: string; color: string; Icon: ComponentType<IconProps> }
 
+export function graphColor(color: string): string {
+  if (document.documentElement.dataset.theme !== "light") return color;
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) return color;
+  const value = Number.parseInt(match[1], 16);
+  const channel = (shift: number) => Math.round(((value >> shift) & 0xff) * 0.58);
+  return `#${[channel(16), channel(8), channel(0)].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
+}
+
 export const KINDS: Record<string, Kind> = {
   activity: { key: "activity", label: "Activity", color: "#3ddc84", Icon: AndroidLogo },
   fragment: { key: "fragment", label: "Fragment", color: "#2fb8a0", Icon: lucide(Cuboid) },
