@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
+import { ArrowUpRight, Bot, Code2, FolderGit2, MessageCircle, RotateCcw, Send, Sparkles, UserRound, X } from "lucide-react";
 import type { GEdge, GNode, GraphMeta } from "../types/graph";
 
 interface Props {
@@ -178,13 +178,13 @@ export default function ChatPanel({ repository, graph, nodes, edges }: Props) {
   return (
     <div className="chat-widget">
       {open && (
-        <section className="chat-panel" aria-label="Codebase chat" aria-live="polite">
+        <section className="chat-panel" aria-labelledby="chat-title" aria-live="polite">
           <header className="chat-header">
             <div className="chat-title">
-              <span className="chat-title-icon"><MessageCircle size={17} /></span>
+              <span className="chat-title-icon"><Bot size={18} /></span>
               <div>
-                <h2>Ask CodeAtlas</h2>
-                <p>Explore your codebase</p>
+                <h2 id="chat-title">Ask CodeAtlas</h2>
+                <p>Understand your codebase</p>
               </div>
             </div>
             <div className="chat-header-actions">
@@ -209,32 +209,50 @@ export default function ChatPanel({ repository, graph, nodes, edges }: Props) {
             </div>
           </header>
 
+          <div className="chat-context">
+            <div className="chat-context-repo">
+              <FolderGit2 size={14} aria-hidden="true" />
+              <span title={graph ? `${graph.repository.owner}/${graph.repository.name} · ${graph.branch}` : projectName}>
+                {graph ? `${graph.repository.owner}/${graph.repository.name} · ${graph.branch}` : projectName}
+              </span>
+            </div>
+            <span className={`chat-context-status${graph ? " ready" : ""}`}>
+              <span aria-hidden="true" />
+              {graph ? "Graph ready" : "No graph loaded"}
+            </span>
+          </div>
+
           <div className="chat-body" ref={bodyRef} role="log" aria-label="Chat messages" aria-live="polite">
             {messages.length === 0 && (
               <div className="chat-welcome">
-                <span className="chat-welcome-icon"><Sparkles size={18} /></span>
-                <h3>Welcome!</h3>
-                <p>You can ask me anything about <strong>{projectName}</strong>.</p>
+                <span className="chat-welcome-icon"><Sparkles size={17} /></span>
+                <p className="chat-kicker">CODEBASE ASSISTANT</p>
+                <h3>Your codebase,<br />clearly explained.</h3>
+                <p className="chat-welcome-copy">
+                  Ask about <strong>{projectName}</strong>, its key files, or how everything fits together.
+                </p>
               </div>
             )}
             <div className="chat-messages">
               {messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
-                  {message.role === "assistant" && <span className="chat-message-icon"><Sparkles size={13} /></span>}
-                  <p>{message.content}</p>
+                  <span className="chat-message-icon" aria-hidden="true">
+                    {message.role === "assistant" ? <Bot size={14} /> : <UserRound size={14} />}
+                  </span>
+                  <div className="chat-message-content">
+                    <span className="chat-message-label">{message.role === "assistant" ? "CodeAtlas" : "You"}</span>
+                    <p>{message.content}</p>
+                  </div>
                 </article>
               ))}
             </div>
             {messages.length === 0 && (
               <div className="chat-suggestions" aria-label="Suggested questions">
                 {suggestions.map((suggestion) => (
-                  <button
-                    className="chat-suggestion"
-                    key={suggestion}
-                    type="button"
-                    onClick={() => sendMessage(suggestion)}
-                  >
-                    {suggestion}
+                  <button className="chat-suggestion" key={suggestion} type="button" onClick={() => sendMessage(suggestion)}>
+                    <span className="chat-suggestion-icon"><Code2 size={15} /></span>
+                    <span>{suggestion}</span>
+                    <ArrowUpRight className="chat-suggestion-arrow" size={15} aria-hidden="true" />
                   </button>
                 ))}
               </div>
@@ -245,17 +263,20 @@ export default function ChatPanel({ repository, graph, nodes, edges }: Props) {
             <textarea
               ref={inputRef}
               aria-label="Message"
-              placeholder="Ask about this codebase…"
+              placeholder="Ask about files, classes, or connections…"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={onInputKeyDown}
               rows={2}
             />
-            <button className="chat-send" type="submit" aria-label="Send message" disabled={!draft.trim()}>
+            <button className="chat-send" type="submit" aria-label="Send message" title="Send message" disabled={!draft.trim()}>
               <Send size={16} />
             </button>
           </form>
-          <p className="chat-note">Answers are based on the loaded graph; no AI service is connected.</p>
+          <div className="chat-footer">
+            <p className="chat-note">Answers use the loaded code graph</p>
+            <span className="chat-shortcut"><kbd>Enter</kbd> to send</span>
+          </div>
         </section>
       )}
 
