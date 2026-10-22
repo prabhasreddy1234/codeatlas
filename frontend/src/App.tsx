@@ -5,6 +5,7 @@ import type { Me } from "./types/graph";
 import Header from "./components/Header";
 import ConnectPage from "./pages/ConnectPage";
 import Dashboard from "./pages/Dashboard";
+import OrbLoader from "./components/OrbLoader";
 
 type Theme = "light" | "dark";
 
@@ -50,10 +51,9 @@ export default function App() {
   if (!me) return (
     <div className="connect">
       <div className="connect-card loading-shell">
-        <div className="brand-mark"><Network size={42} /></div>
+        <OrbLoader />
         <p className="eyebrow">Preparing workspace</p>
         <h1>Loading CodeAtlas…</h1>
-        <div className="loading-bar"><span /></div>
       </div>
     </div>
   );
