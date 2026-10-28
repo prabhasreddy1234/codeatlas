@@ -60,7 +60,7 @@ export default function Inspector({ details, loading, onClose, onMembers, onFocu
         <div className="cn-icon" style={{ background: `${graphColor(kind.color, theme)}22` }}><kind.Icon size={22} color={graphColor(kind.color, theme)} /></div>
         <div>
           <div className="insp-name">{n.name}</div>
-          <div className="cn-type">{typeLabel(n)} <LanguageLogo lang={n.language} /></div>
+          <div className="cn-type">{typeLabel(n)} <LanguageLogo lang={n.language} theme={theme} /></div>
         </div>
         <button className="icon-btn" onClick={onClose} title="Close"><X size={16} /></button>
       </div>

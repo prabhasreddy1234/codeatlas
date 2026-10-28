@@ -37,7 +37,7 @@ export default function CodeNode({ data }: NodeProps<CodeFlowNode>) {
           <span className="cn-role" style={{ color, borderColor: `${color}66`, background: `${color}14` }}>
             {kind.label}
           </span>
-          {node.type !== "package" && node.type !== "file" && node.language && <LanguageLogo lang={node.language} size={11} />}
+          {node.type !== "package" && node.type !== "file" && node.language && <LanguageLogo lang={node.language} size={11} theme={theme} />}
         </div>
         <div className="cn-name">
           {node.name}

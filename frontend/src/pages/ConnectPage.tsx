@@ -1,6 +1,6 @@
 import { Network } from "lucide-react";
 import type { Me } from "../types/graph";
-import { AndroidLogo, GithubLogo, JavaLogo, KotlinLogo, PythonLogo } from "../graph/style";
+import { GithubLogo, LanguageLogo, type Theme } from "../graph/style";
 
 const ERRORS: Record<string, string> = {
   access_denied: "GitHub authorization was cancelled.",
@@ -9,7 +9,7 @@ const ERRORS: Record<string, string> = {
   user_fetch_failed: "Signed in, but the GitHub account could not be read.",
 };
 
-export default function ConnectPage({ me }: { me: Me | null }) {
+export default function ConnectPage({ me, theme }: { me: Me | null; theme: Theme }) {
   const err = new URLSearchParams(window.location.search).get("auth_error");
   return (
     <div className="connect">
@@ -20,10 +20,10 @@ export default function ConnectPage({ me }: { me: Me | null }) {
         <p>Deterministic code graphs for Python and Android projects. Python, Kotlin, and Java source are analyzed locally — no LLM or AI APIs.</p>
 
         <div className="logos" aria-label="Supported languages">
-          <PythonLogo size={26} />
-          <AndroidLogo size={26} />
-          <KotlinLogo size={26} />
-          <JavaLogo size={26} />
+          <LanguageLogo lang="python" size={26} theme={theme} />
+          <LanguageLogo lang="android" size={26} theme={theme} />
+          <LanguageLogo lang="kotlin" size={26} theme={theme} />
+          <LanguageLogo lang="java" size={26} theme={theme} />
         </div>
 
         <div className="feature-grid">

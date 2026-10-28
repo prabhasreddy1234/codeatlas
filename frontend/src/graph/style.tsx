@@ -77,10 +77,11 @@ export function typeLabel(n: GNode): string {
   return roles.length ? `${roles.join(" · ")} (${base})` : base;
 }
 
-export const LanguageLogo = ({ lang, size = 12 }: { lang?: string | null; size?: number }) =>
-  lang === "kotlin" ? <KotlinLogo size={size} />
-    : lang === "java" ? <JavaLogo size={size} />
-      : lang === "python" ? <PythonLogo size={size} /> : null;
+export const LanguageLogo = ({ lang, size = 12, theme }: { lang?: string | null; size?: number; theme: Theme }) =>
+  lang === "kotlin" ? <KotlinLogo size={size} color={graphColor(`#${siKotlin.hex}`, theme)} />
+    : lang === "java" ? <JavaLogo size={size} color={theme === "dark" ? "var(--text)" : undefined} />
+      : lang === "python" ? <PythonLogo size={size} color={graphColor(`#${siPython.hex}`, theme)} />
+        : lang === "android" ? <AndroidLogo size={size} color={graphColor(`#${siAndroid.hex}`, theme)} /> : null;
 
 export const EDGE_STYLE: Record<EdgeType, { color: string; label: string; dash?: string }> = {
   CONTAINS: { color: "#475569", label: "Contains" },

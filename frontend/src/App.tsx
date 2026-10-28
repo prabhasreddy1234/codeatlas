@@ -13,7 +13,12 @@ export default function App() {
   const [down, setDown] = useState(false);
   const [sel, setSel] = useState<{ repo?: string; branch?: string }>({});
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = window.localStorage.getItem("codeatlas-theme");
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem("codeatlas-theme");
+    } catch (error) {
+      console.warn("Could not read the saved theme preference.", error);
+    }
     if (saved === "light" || saved === "dark") return saved;
     return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   });
@@ -21,7 +26,11 @@ export default function App() {
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem("codeatlas-theme", theme);
+    try {
+      window.localStorage.setItem("codeatlas-theme", theme);
+    } catch (error) {
+      console.warn("Could not save the theme preference.", error);
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -56,7 +65,7 @@ export default function App() {
       </div>
     </div>
   );
-  if (!me.authenticated) return <><Header me={me} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} onLogout={logout} /><ConnectPage me={me} /></>;
+  if (!me.authenticated) return <><Header me={me} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} onLogout={logout} /><ConnectPage me={me} theme={theme} /></>;
   return (
     <div className="app">
       <Header me={me} repo={sel.repo} branch={sel.branch} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} onLogout={logout} />
