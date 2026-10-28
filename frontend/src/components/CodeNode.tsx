@@ -1,6 +1,6 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { GNode } from "../types/graph";
-import { graphColor, LanguageLogo, kindOf, typeLabel } from "../graph/style";
+import { graphColor, LanguageLogo, kindOf, typeLabel, type Theme } from "../graph/style";
 
 export type CodeNodeData = {
   node: GNode;
@@ -9,13 +9,14 @@ export type CodeNodeData = {
   dimmed: boolean;
   matched: boolean;
   owner?: string;
+  theme: Theme;
 };
 export type CodeFlowNode = Node<CodeNodeData, "code">;
 
 export default function CodeNode({ data }: NodeProps<CodeFlowNode>) {
-  const { node, dir, selected, dimmed, matched, owner } = data;
+  const { node, dir, selected, dimmed, matched, owner, theme } = data;
   const kind = kindOf(node);
-  const color = graphColor(kind.color);
+  const color = graphColor(kind.color, theme);
   const context =
     node.type === "package" ? null
       : node.type === "file" ? node.package

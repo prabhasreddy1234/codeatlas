@@ -14,7 +14,7 @@ interface Props {
 export default function Header({ me, repo, branch, theme, onToggleTheme, onLogout }: Props) {
   return (
     <header className="header">
-      <div className="brand"><Network size={22} color="#3ddc84" /><span>CodeAtlas</span></div>
+      <div className="brand"><Network size={22} /><span>CodeAtlas</span></div>
       <div className="header-mid">
         {repo && <span className="pill">{repo}</span>}
         {branch && <span className="pill alt">{branch}</span>}

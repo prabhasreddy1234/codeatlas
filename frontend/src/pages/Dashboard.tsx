@@ -10,7 +10,7 @@ import {
 import { api, ApiError } from "../api/client";
 import type { Branch, EdgeType, GEdge, GNode, GraphDocument, GraphMeta, JobStatus, NodeDetails, Repo } from "../types/graph";
 import type { Direction } from "../graph/layout";
-import { ALL_EDGE_TYPES, DEFAULT_EDGE_TYPES, EDGE_STYLE, NODE_FILTERS } from "../graph/style";
+import { ALL_EDGE_TYPES, DEFAULT_EDGE_TYPES, EDGE_STYLE, graphColor, NODE_FILTERS, type Theme } from "../graph/style";
 import RepoPanel from "../components/RepoPanel";
 import GraphCanvas from "../components/GraphCanvas";
 import Inspector from "../components/Inspector";
@@ -22,9 +22,10 @@ const msg = (e: unknown) => (e instanceof ApiError ? e.message : "Unexpected err
 interface Props {
   privateAccess: boolean;
   onSelection: (repo?: string, branch?: string) => void;
+  theme: Theme;
 }
 
-export default function Dashboard({ privateAccess, onSelection }: Props) {
+export default function Dashboard({ privateAccess, onSelection, theme }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -365,7 +366,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
               <h4>Relationships</h4>
               <div className="chips">
                 {ALL_EDGE_TYPES.map((t) => (
-                  <label key={t} className={`chip${edgeFilter.has(t) ? " on" : ""}`} style={edgeFilter.has(t) ? { borderColor: EDGE_STYLE[t].color } : undefined}>
+                  <label key={t} className={`chip${edgeFilter.has(t) ? " on" : ""}`} style={edgeFilter.has(t) ? { borderColor: graphColor(EDGE_STYLE[t].color, theme) } : undefined}>
                     <input type="checkbox" checked={edgeFilter.has(t)} onChange={() => toggle(edgeFilter, t, setEdgeFilter)} />{EDGE_STYLE[t].label}
                   </label>
                 ))}
@@ -374,7 +375,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
           </>
         )}
         <button className="ghost" onClick={() => setShowLegend((s) => !s)}>{showLegend ? "Hide" : "Show"} legend</button>
-        {showLegend && <Legend />}
+        {showLegend && <Legend theme={theme} />}
       </div>
       {sidebarOpen && (
         <div
@@ -479,7 +480,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
                 <ReactFlowProvider>
                   <GraphCanvas
                     nodes={visNodes} edges={visEdges} selectedId={selectedId} matchIds={matchIds}
-                    direction={direction} streaming={busy} onSelect={select} onReset={backToOverview}
+                    direction={direction} streaming={busy} theme={theme} onSelect={select} onReset={backToOverview}
                   />
                 </ReactFlowProvider>
               )}
@@ -532,6 +533,7 @@ export default function Dashboard({ privateAccess, onSelection }: Props) {
           details={details} loading={detailsLoading} onClose={() => select(null)}
           onMembers={(id) => expand(id, "both", true)}
           onFocus={hideUnrelated} onSelect={(id) => { select(id); if (!nodes.has(id)) expand(id, "both"); }}
+          theme={theme}
         />
       )}
         </div>

@@ -1,6 +1,6 @@
 import { EyeOff, ListTree, X } from "lucide-react";
 import type { EdgeView, NodeDetails } from "../types/graph";
-import { EDGE_STYLE, LanguageLogo, kindOf, typeLabel } from "../graph/style";
+import { EDGE_STYLE, graphColor, LanguageLogo, kindOf, typeLabel, type Theme } from "../graph/style";
 
 interface Props {
   details: NodeDetails | null;
@@ -9,9 +9,10 @@ interface Props {
   onMembers: (id: string) => void;
   onFocus: (id: string) => void;
   onSelect: (id: string) => void;
+  theme: Theme;
 }
 
-function Group({ title, edges, onSelect, outgoing }: { title: string; edges: EdgeView[]; onSelect: (id: string) => void; outgoing: boolean }) {
+function Group({ title, edges, onSelect, outgoing, theme }: { title: string; edges: EdgeView[]; onSelect: (id: string) => void; outgoing: boolean; theme: Theme }) {
   if (!edges.length) return null;
   const byType = new Map<string, EdgeView[]>();
   edges.forEach((e) => byType.set(e.type, [...(byType.get(e.type) ?? []), e]));
@@ -20,7 +21,7 @@ function Group({ title, edges, onSelect, outgoing }: { title: string; edges: Edg
       <h4>{title} ({edges.length})</h4>
       {[...byType.entries()].map(([type, list]) => (
         <div key={type} className="rel-group">
-          <div className="rel-type" style={{ color: EDGE_STYLE[type as keyof typeof EDGE_STYLE]?.color }}>
+          <div className="rel-type" style={{ color: graphColor(EDGE_STYLE[type as keyof typeof EDGE_STYLE]?.color ?? "var(--text)", theme) }}>
             {EDGE_STYLE[type as keyof typeof EDGE_STYLE]?.label ?? type}
           </div>
           {list.slice(0, 60).map((e) => (
@@ -42,7 +43,7 @@ function Group({ title, edges, onSelect, outgoing }: { title: string; edges: Edg
   );
 }
 
-export default function Inspector({ details, loading, onClose, onMembers, onFocus, onSelect }: Props) {
+export default function Inspector({ details, loading, onClose, onMembers, onFocus, onSelect, theme }: Props) {
   if (!details) {
     return (
       <aside className="inspector empty">
@@ -56,7 +57,7 @@ export default function Inspector({ details, loading, onClose, onMembers, onFocu
   return (
     <aside className="inspector">
       <div className="insp-head">
-        <div className="cn-icon" style={{ background: `${kind.color}22` }}><kind.Icon size={22} color={kind.color} /></div>
+        <div className="cn-icon" style={{ background: `${graphColor(kind.color, theme)}22` }}><kind.Icon size={22} color={graphColor(kind.color, theme)} /></div>
         <div>
           <div className="insp-name">{n.name}</div>
           <div className="cn-type">{typeLabel(n)} <LanguageLogo lang={n.language} /></div>
@@ -78,8 +79,8 @@ export default function Inspector({ details, loading, onClose, onMembers, onFocu
         )}
         <button onClick={() => onFocus(n.id)} title="Hide everything not connected to this node"><EyeOff size={14} /> Hide unrelated</button>
       </div>
-      <Group title="Outgoing" edges={details.outgoing} onSelect={onSelect} outgoing />
-      <Group title="Incoming" edges={details.incoming} onSelect={onSelect} outgoing={false} />
+      <Group title="Outgoing" edges={details.outgoing} onSelect={onSelect} outgoing theme={theme} />
+      <Group title="Incoming" edges={details.incoming} onSelect={onSelect} outgoing={false} theme={theme} />
       {details.children.length > 0 && (
         <section>
           <h4>Declares ({details.children.length})</h4>

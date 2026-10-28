@@ -7,6 +7,7 @@ import { siAndroid, siGithub, siJetpackcompose, siKotlin, siOpenjdk, siPython } 
 import type { EdgeType, GNode } from "../types/graph";
 
 export type IconProps = { size?: number; color?: string };
+export type Theme = "light" | "dark";
 
 const brand = (icon: { path: string; hex: string }) =>
   function BrandIcon({ size = 18, color }: IconProps) {
@@ -29,8 +30,8 @@ const lucide = (I: Lucide) => ({ size = 18, color }: IconProps) => <I size={size
 
 export interface Kind { key: string; label: string; color: string; Icon: ComponentType<IconProps> }
 
-export function graphColor(color: string): string {
-  if (document.documentElement.dataset.theme !== "light") return color;
+export function graphColor(color: string, theme: Theme): string {
+  if (theme !== "light") return color;
   const match = /^#([0-9a-f]{6})$/i.exec(color);
   if (!match) return color;
   const value = Number.parseInt(match[1], 16);

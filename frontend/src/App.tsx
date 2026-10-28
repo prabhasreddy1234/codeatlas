@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Network } from "lucide-react";
 import { api, setCsrf } from "./api/client";
+import type { Theme } from "./graph/style";
 import type { Me } from "./types/graph";
 import Header from "./components/Header";
 import ConnectPage from "./pages/ConnectPage";
 import Dashboard from "./pages/Dashboard";
 import OrbLoader from "./components/OrbLoader";
-
-type Theme = "light" | "dark";
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -19,7 +18,7 @@ export default function App() {
     return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem("codeatlas-theme", theme);
@@ -61,7 +60,7 @@ export default function App() {
   return (
     <div className="app">
       <Header me={me} repo={sel.repo} branch={sel.branch} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} onLogout={logout} />
-      <Dashboard privateAccess={Boolean(me.private_access)} onSelection={onSelection} />
+      <Dashboard privateAccess={Boolean(me.private_access)} onSelection={onSelection} theme={theme} />
     </div>
   );
 }

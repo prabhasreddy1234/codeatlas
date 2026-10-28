@@ -6,7 +6,7 @@ import {
 import { Maximize, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import type { GEdge, GNode } from "../types/graph";
 import { layout, type Direction } from "../graph/layout";
-import { EDGE_STYLE, graphColor } from "../graph/style";
+import { EDGE_STYLE, graphColor, type Theme } from "../graph/style";
 import CodeNode, { type CodeFlowNode } from "./CodeNode";
 
 const nodeTypes = { code: CodeNode };
@@ -18,12 +18,13 @@ interface Props {
   matchIds: Set<string>;
   direction: Direction;
   streaming: boolean;
+  theme: Theme;
   onSelect: (id: string | null) => void;
   onReset: () => void;
 }
 
 export default function GraphCanvas({
-  nodes, edges, selectedId, matchIds, direction, streaming, onSelect, onReset,
+  nodes, edges, selectedId, matchIds, direction, streaming, theme, onSelect, onReset,
 }: Props) {
   const rf = useReactFlow();
   const lastStreamFitCount = useRef(0);
@@ -55,18 +56,18 @@ export default function GraphCanvas({
       data: {
         node: n, dir: direction, selected: n.id === selectedId,
         dimmed: related ? !related.has(n.id) : false,
-        matched: matchIds.has(n.id), owner: n.qualified_name.split(".").slice(-2, -1)[0],
+        matched: matchIds.has(n.id), owner: n.qualified_name.split(".").slice(-2, -1)[0], theme,
       },
     })),
-    [nodes, positions, direction, selectedId, related, matchIds],
+    [nodes, positions, direction, selectedId, related, matchIds, theme],
   );
 
   const flowEdges: Edge[] = useMemo(() => {
     const ids = new Set(nodes.map((n) => n.id));
     return edges.filter((e) => e.target && ids.has(e.source) && ids.has(e.target)).map((e) => {
       const st = EDGE_STYLE[e.type];
-      const lightTheme = document.documentElement.dataset.theme === "light";
-      const color = graphColor(st.color);
+      const lightTheme = theme === "light";
+      const color = graphColor(st.color, theme);
       const active = !selectedId || e.source === selectedId || e.target === selectedId;
       const dashed = e.status === "inferred" ? "5 4" : st.dash;
       return {
@@ -85,7 +86,7 @@ export default function GraphCanvas({
         labelBgPadding: [6, 4],
       } as Edge;
     });
-  }, [edges, nodes, selectedId]);
+  }, [edges, nodes, selectedId, theme]);
 
   const key = useMemo(() => nodes.map((n) => n.id).join(",") + direction, [nodes, direction]);
   const previousKey = useRef(key);
