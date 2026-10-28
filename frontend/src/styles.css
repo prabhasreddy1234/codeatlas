@@ -115,60 +115,56 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .orb-halo {
   position: absolute;
-  inset: 12px;
+  inset: 18px;
   z-index: -1;
   border-radius: 50%;
   background: var(--accent);
-  filter: blur(22px);
-  opacity: 0.25;
+  filter: blur(24px);
+  opacity: 0.3;
   animation: orb-breathe 2.4s ease-in-out infinite;
+}
+.orb-graph {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.orb-graph-shell {
+  fill: color-mix(in srgb, var(--panel) 30%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 38%, #7dd3fc);
+  stroke-width: 0.8;
+}
+.orb-edges {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 64%, #7dd3fc);
+  stroke-width: 0.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 3 3;
+  animation: orb-flow 3s linear infinite;
+}
+.orb-nodes {
+  fill: #c9fff0;
+  stroke: color-mix(in srgb, var(--accent) 78%, #7dd3fc);
+  stroke-width: 0.9;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 70%, transparent));
+  animation: orb-breathe 1.8s ease-in-out infinite alternate;
 }
 .orb-core {
-  width: 38px;
-  height: 38px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #e0fff0, #7ae9ad 34%, var(--accent) 72%, #087e65);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 60%, transparent), inset -5px -6px 12px rgba(0, 48, 45, 0.28);
+  background: radial-gradient(circle at 32% 28%, #e0fff0, #7ae9ad 38%, var(--accent) 74%, #087e65);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent), inset -3px -4px 7px rgba(0, 48, 45, 0.28);
   animation: orb-breathe 2.4s ease-in-out infinite;
-}
-.orb-ring {
-  position: absolute;
-  width: 76px;
-  height: 32px;
-  border: 1px solid color-mix(in srgb, var(--accent) 65%, #7dd3fc);
-  border-radius: 50%;
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-.orb-ring-one { transform: rotate(-34deg); animation: orb-rotate 3.6s linear infinite; }
-.orb-ring-two {
-  width: 68px;
-  height: 28px;
-  border-color: color-mix(in srgb, #7dd3fc 68%, var(--accent));
-  transform: rotate(54deg);
-  animation: orb-rotate-reverse 4.4s linear infinite;
-}
-.orb-spark {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  top: 12px;
-  right: 13px;
-  border-radius: 50%;
-  background: #d9faff;
-  box-shadow: 0 0 12px #7dd3fc;
-  animation: orb-breathe 1.6s ease-in-out infinite alternate;
 }
 @keyframes orb-breathe {
   50% { transform: scale(1.12); opacity: 0.8; }
 }
-@keyframes orb-rotate {
-  to { transform: rotate(326deg); }
-}
-@keyframes orb-rotate-reverse {
-  to { transform: rotate(-306deg); }
+@keyframes orb-flow {
+  to { stroke-dashoffset: -12; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .orb-halo, .orb-core, .orb-ring, .orb-spark { animation: none; }
+  .orb-halo, .orb-core, .orb-edges, .orb-nodes { animation: none; }
 }
 
 .dashboard-split { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
