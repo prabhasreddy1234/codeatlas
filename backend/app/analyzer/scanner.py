@@ -25,34 +25,49 @@ class ScanResult:
     skipped_large: int = 0
 
 
+def _should_skip_directory(dirpath: str, dirname: str) -> bool:
+    full = os.path.join(dirpath, dirname)
+    return dirname in IGNORED_DIRS or os.path.islink(full)
+
+
+def _classify_file(rel: str, ext: str) -> str | None:
+    if ext in SOURCE_EXT:
+        return "src"
+    if ext == ".xml" and LAYOUT_RE.search(rel):
+        return "layout"
+    if ext == ".xml" and NAV_RE.search(rel):
+        return "nav"
+    return None
+
+
 def scan(root: Path, max_file_bytes: int, max_files: int) -> ScanResult:
+    """Collect repository source, layout, and navigation files while filtering noise."""
     root = root.resolve()
     res = ScanResult()
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = sorted(d for d in dirnames
-                             if d not in IGNORED_DIRS and not os.path.islink(os.path.join(dirpath, d)))
+        dirnames[:] = sorted(
+            d for d in dirnames if not _should_skip_directory(dirpath, d)
+        )
         for fn in sorted(filenames):
             full = Path(dirpath) / fn
             if full.is_symlink() or not full.is_file():
                 continue
+
             rel = full.relative_to(root).as_posix()
             ext = full.suffix.lower()
-            kind = None
-            if ext in SOURCE_EXT:
-                kind = "src"
-            elif ext == ".xml" and LAYOUT_RE.search(rel):
-                kind = "layout"
-            elif ext == ".xml" and NAV_RE.search(rel):
-                kind = "nav"
+            kind = _classify_file(rel, ext)
             if kind is None:
                 continue
+
             if full.stat().st_size > max_file_bytes:
                 res.skipped_large += 1
                 res.warnings.append(f"Skipped {rel}: larger than {max_file_bytes} bytes")
                 continue
+
             if len(res.sources) >= max_files:
                 res.warnings.append(f"File limit {max_files} reached; remaining files skipped")
                 return res
+
             if kind == "src":
                 res.sources.append((rel, full, SOURCE_EXT[ext]))
             elif kind == "layout":
