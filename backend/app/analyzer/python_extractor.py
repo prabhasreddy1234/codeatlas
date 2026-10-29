@@ -1,4 +1,4 @@
-"""Extract Python declarations and relationships with the standard-library AST."""
+"""Extract Python declarations and call graph relationships from AST data."""
 from __future__ import annotations
 
 import ast
@@ -98,11 +98,15 @@ def _relative_module(current: str, module: str, level: int, is_package: bool) ->
     return ".".join([*package_parts, *([module] if module else [])])
 
 
+def _annotation_name_leaf(name: str) -> str:
+    return name.rsplit(".", 1)[-1]
+
+
 def _annotation_type(node: ast.AST | None) -> str | None:
     names = _annotation_names(node)
     return next((name for name in names
-                 if name.rsplit(".", 1)[-1] not in _TYPE_WRAPPERS
-                 and name.rsplit(".", 1)[-1] not in _BUILTIN_TYPES), None)
+                 if _annotation_name_leaf(name) not in _TYPE_WRAPPERS
+                 and _annotation_name_leaf(name) not in _BUILTIN_TYPES), None)
 
 
 def _literal_type(node: ast.AST | None) -> str | None:
@@ -314,23 +318,45 @@ def _imports(tree: ast.Module, module_name: str, path: str) -> list[ImportDecl]:
     return imports
 
 
+class PythonFileBuilder:
+    """Build a `ParsedFile` from a Python source blob."""
+
+    def __init__(self, path: str, source: bytes) -> None:
+        self.path = path
+        self.source = source
+        self.module_name = _module_name(path)
+        self.file = ParsedFile(
+            path=path,
+            language="python",
+            package=self.module_name,
+            line_count=source.count(b"\n") + 1,
+        )
+
+    def build(self) -> ParsedFile:
+        try:
+            tree = ast.parse(self.source, filename=self.path, type_comments=True)
+        except (SyntaxError, UnicodeDecodeError):
+            self.file.has_errors = True
+            return self.file
+
+        self.file.imports = _imports(tree, self.module_name, self.path)
+        self._collect_top_level_members(tree)
+        return self.file
+
+    def _collect_top_level_members(self, tree: ast.Module) -> None:
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                self.file.types.append(_class(node))
+                continue
+
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                function, _ = _function(node)
+                self.file.functions.append(function)
+                continue
+
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                _BodyVisitor(self.file).visit(node)
+
+
 def parse_python(path: str, source: bytes) -> ParsedFile:
-    module_name = _module_name(path)
-    pf = ParsedFile(
-        path=path, language="python", package=module_name,
-        line_count=source.count(b"\n") + 1)
-    try:
-        tree = ast.parse(source, filename=path, type_comments=True)
-    except (SyntaxError, UnicodeDecodeError):
-        pf.has_errors = True
-        return pf
-    pf.imports = _imports(tree, module_name, path)
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            pf.types.append(_class(node))
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            function, _ = _function(node)
-            pf.functions.append(function)
-        elif not isinstance(node, (ast.Import, ast.ImportFrom)):
-            _BodyVisitor(pf).visit(node)
-    return pf
+    return PythonFileBuilder(path, source).build()
