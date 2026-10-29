@@ -205,19 +205,49 @@ def _type(n: Node) -> TypeDecl:
     return td
 
 
+class JavaFileBuilder:
+    """Collect Java syntax facts from a parsed source tree."""
+
+    def __init__(self, path: str, source: bytes) -> None:
+        self.path = path
+        self.source = source
+        self.file = ParsedFile(
+            path=path,
+            language="java",
+            line_count=source.count(b"\n") + 1,
+        )
+
+    def build(self) -> ParsedFile:
+        root = _parser().parse(self.source).root_node
+        self.file.has_errors = root.has_error
+        self._collect_top_level_members(root)
+        return self.file
+
+    def _collect_top_level_members(self, root: Node) -> None:
+        for child in root.children:
+            if child.type == "package_declaration":
+                self._collect_package(child)
+            elif child.type == "import_declaration":
+                self._collect_import(child)
+            elif child.type in TYPE_NODES:
+                self.file.types.append(_type(child))
+
+    def _collect_package(self, node: Node) -> None:
+        name_node = next((child for child in node.children if child.type in ("scoped_identifier", "identifier")), None)
+        self.file.package, self.file.package_line = text(name_node), line(node)
+
+    def _collect_import(self, node: Node) -> None:
+        name_node = next((child for child in node.children if child.type in ("scoped_identifier", "identifier")), None)
+        self.file.imports.append(
+            ImportDecl(
+                text(name_node),
+                any(child.type == "asterisk" for child in node.children),
+                None,
+                any(child.type == "static" for child in node.children),
+                line(node),
+            )
+        )
+
+
 def parse_java(path: str, source: bytes) -> ParsedFile:
-    tree = _parser().parse(source)
-    root = tree.root_node
-    pf = ParsedFile(path=path, language="java", has_errors=root.has_error,
-                    line_count=source.count(b"\n") + 1)
-    for c in root.children:
-        if c.type == "package_declaration":
-            pn = next((x for x in c.children if x.type in ("scoped_identifier", "identifier")), None)
-            pf.package, pf.package_line = text(pn), line(c)
-        elif c.type == "import_declaration":
-            pn = next((x for x in c.children if x.type in ("scoped_identifier", "identifier")), None)
-            pf.imports.append(ImportDecl(text(pn), any(x.type == "asterisk" for x in c.children),
-                                         None, any(x.type == "static" for x in c.children), line(c)))
-        elif c.type in TYPE_NODES:
-            pf.types.append(_type(c))
-    return pf
+    return JavaFileBuilder(path, source).build()
