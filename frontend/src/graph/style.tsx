@@ -35,7 +35,7 @@ export function graphColor(color: string, theme: Theme): string {
   const match = /^#([0-9a-f]{6})$/i.exec(color);
   if (!match) return color;
   const value = Number.parseInt(match[1], 16);
-  const channel = (shift: number) => Math.round(((value >> shift) & 0xff) * 0.58);
+  const channel = (shift: number) => Math.round(((value >> shift) & 0xff) * 0.48);
   return `#${[channel(16), channel(8), channel(0)].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
 }
 

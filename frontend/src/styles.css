@@ -22,7 +22,7 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f4f7fb; --panel: #ffffff; --panel2: #f1f5f9; --border: #dbe3ed; --text: #172033;
-  --muted: #64748b; --accent: #16834b; --accent-foreground: #ffffff; --danger: #dc2626; --link: #0369a1;
+  --muted: #5f6b7e; --accent: #147747; --accent-foreground: #ffffff; --danger: #dc2626; --link: #0369a1;
   --canvas-dot: #b8c4d3; --node-bg: #ffffff; --node-border: #cbd5e1;
   --glass: rgba(255, 255, 255, 0.72); --soft-panel: rgba(255, 255, 255, 0.58);
   --glass-surface: rgba(255, 255, 255, 0.76); --glass-highlight: rgba(255, 255, 255, 0.78);
