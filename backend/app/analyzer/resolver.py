@@ -132,60 +132,62 @@ class SymbolIndex:
             r = self.provider.resolve_type(name, ctx)
             if r is not None:
                 return r
+
         if name in self.types:
             info = self.types[name]
             return Resolved("confirmed", info.fqn, info, "fully-qualified name")
+
+        return self._resolve_qualified_name(name, ctx)
+
+    def _resolve_qualified_name(self, name: str, ctx: FileContext) -> Resolved:
         segs = name.split(".")
         head, rest = segs[0], segs[1:]
         base = self._resolve_head(head, ctx)
-        if rest and base.fqn:
+
+        if not rest:
+            return base
+
+        if base.fqn:
             fqn = f"{base.fqn}.{'.'.join(rest)}"
             if fqn in self.types:
                 status = "confirmed" if base.status == "external" else base.status
                 return Resolved(status, fqn, self.types[fqn], base.provenance + " + nested")
-        if not rest or base.status in ("unresolved",):
-            return base
-        fqn = f"{base.fqn}.{'.'.join(rest)}"
-        if fqn in self.types:
-            return Resolved(base.status, fqn, self.types[fqn], base.provenance + " + nested")
+
         if base.status == "external":
-            return Resolved("external", fqn, None, base.provenance)
-        return Resolved("unresolved", None, None, f"nested type {fqn} not found")
+            return Resolved("external", f"{base.fqn}.{'.'.join(rest)}" if base.fqn else None,
+                            None, base.provenance)
+
+        return Resolved("unresolved", None, None, f"nested type {head}.{'.'.join(rest)} not found")
 
     def _resolve_head(self, head: str, ctx: FileContext) -> Resolved:
         for enc in ctx.enclosing:
             if enc.decl.name == head:
                 return Resolved("confirmed", enc.fqn, enc, "lexical scope")
-            cand = self.types.get(f"{enc.fqn}.{head}")
-            if cand:
-                return Resolved("confirmed", cand.fqn, cand, "nested in enclosing type")
+            nested = self.types.get(f"{enc.fqn}.{head}")
+            if nested:
+                return Resolved("confirmed", nested.fqn, nested, "nested in enclosing type")
+
         if head in ctx.explicit:
-            path = ctx.explicit[head]
-            if path in self.types:
-                return Resolved("confirmed", path, self.types[path], f"import {path}")
-            return Resolved("external", path, None, f"import {path} (outside repository)")
+            return self._resolve_explicit_import(head, ctx)
+
         pkg = ctx.pf.package
-        cand = self.types.get(f"{pkg}.{head}" if pkg else head)
-        if cand:
-            return Resolved("confirmed", cand.fqn, cand, "same package")
-        wildcard_matches = {
-            candidate.fqn: candidate
-            for w in ctx.wildcards
-            if (candidate := self.types.get(f"{w}.{head}")) is not None
-        }
-        if len(wildcard_matches) == 1:
-            candidate = next(iter(wildcard_matches.values()))
-            return Resolved("confirmed", candidate.fqn, candidate, "wildcard import")
-        if len(wildcard_matches) > 1:
-            return Resolved("unresolved", provenance=(
-                f"ambiguous simple name '{head}' in wildcard imports"))
+        same_package = self.types.get(f"{pkg}.{head}" if pkg else head)
+        if same_package:
+            return Resolved("confirmed", same_package.fqn, same_package, "same package")
+
+        wildcard = self._resolve_wildcard_import(head, ctx)
+        if wildcard is not None:
+            return wildcard
+
         if head in BUILTINS:
             return Resolved("external", f"<builtin>.{head}", None, "language/standard library")
         if head in self.types:
             return Resolved("confirmed", head, self.types[head], "fully-qualified name")
+
         if ctx.wildcards:
             return Resolved("unresolved", provenance=(
                 f"'{head}' was not found in wildcard imports {', '.join(ctx.wildcards[:3])}.*"))
+
         same = self.by_simple.get(head, [])
         if len(same) == 1:
             return Resolved("inferred", same[0].fqn, same[0],
@@ -194,6 +196,26 @@ class SymbolIndex:
             return Resolved("unresolved", None, None,
                             f"ambiguous simple name '{head}' ({len(same)} declarations, no import)")
         return Resolved("unresolved", None, None, f"no declaration or import found for '{head}'")
+
+    def _resolve_explicit_import(self, head: str, ctx: FileContext) -> Resolved:
+        path = ctx.explicit[head]
+        if path in self.types:
+            return Resolved("confirmed", path, self.types[path], f"import {path}")
+        return Resolved("external", path, None, f"import {path} (outside repository)")
+
+    def _resolve_wildcard_import(self, head: str, ctx: FileContext) -> Optional[Resolved]:
+        matches = {
+            candidate.fqn: candidate
+            for w in ctx.wildcards
+            if (candidate := self.types.get(f"{w}.{head}")) is not None
+        }
+        if len(matches) == 1:
+            candidate = next(iter(matches.values()))
+            return Resolved("confirmed", candidate.fqn, candidate, "wildcard import")
+        if len(matches) > 1:
+            return Resolved("unresolved", provenance=(
+                f"ambiguous simple name '{head}' in wildcard imports"))
+        return None
 
     # ---- hierarchy -------------------------------------------------------
     def hierarchy(self, info: TypeInfo) -> list[TypeInfo]:
