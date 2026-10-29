@@ -278,18 +278,39 @@ def _import(n: Node) -> ImportDecl:
     return ImportDecl(path, any(c.type == "*" for c in n.children), alias, False, line(n))
 
 
+class KotlinFileBuilder:
+    """Collect Kotlin syntax facts from a parsed source tree."""
+
+    def __init__(self, path: str, source: bytes) -> None:
+        self.path = path
+        self.source = source
+        self.file = ParsedFile(
+            path=path,
+            language="kotlin",
+            line_count=source.count(b"\n") + 1,
+        )
+
+    def build(self) -> ParsedFile:
+        root = _parser().parse(self.source).root_node
+        self.file.has_errors = root.has_error
+        self._collect_top_level_members(root)
+        return self.file
+
+    def _collect_top_level_members(self, root: Node) -> None:
+        for child in root.children:
+            if child.type == "package_header":
+                self._collect_package(child)
+            elif child.type == "import":
+                self.file.imports.append(_import(child))
+            elif child.type in ("class_declaration", "object_declaration"):
+                self.file.types.append(_class(child))
+            elif child.type == "function_declaration":
+                self.file.functions.append(_function(child))
+
+    def _collect_package(self, node: Node) -> None:
+        package_name = _direct(node, "qualified_identifier") or _direct(node, "identifier")
+        self.file.package, self.file.package_line = text(package_name), line(node)
+
+
 def parse_kotlin(path: str, source: bytes) -> ParsedFile:
-    root = _parser().parse(source).root_node
-    pf = ParsedFile(path=path, language="kotlin", has_errors=root.has_error,
-                    line_count=source.count(b"\n") + 1)
-    for c in root.children:
-        if c.type == "package_header":
-            pf.package, pf.package_line = text(_direct(c, "qualified_identifier")
-                                               or _direct(c, "identifier")), line(c)
-        elif c.type == "import":
-            pf.imports.append(_import(c))
-        elif c.type in ("class_declaration", "object_declaration"):
-            pf.types.append(_class(c))
-        elif c.type == "function_declaration":
-            pf.functions.append(_function(c))
-    return pf
+    return KotlinFileBuilder(path, source).build()
