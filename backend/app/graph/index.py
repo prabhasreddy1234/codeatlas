@@ -27,6 +27,19 @@ class GraphIndex:
                 self.children[e.source].append(e.target)
         self._lift_cache: dict[str, Optional[str]] = {}
 
+    def _is_python_top_level_function(self, node: GraphNode) -> bool:
+        parent = self.nodes.get(node.parent_id) if node.parent_id else None
+        return (
+            node.language == "python"
+            and node.type in ("function", "constructor")
+            and parent is not None
+            and parent.type == "file"
+        )
+
+    @staticmethod
+    def _is_class_level_node(node: GraphNode) -> bool:
+        return node.type in CLASS_LIKE or "composable" in node.roles
+
     # ---- helpers -----------------------------------------------------------
     def lift(self, node_id: str) -> Optional[str]:
         """Nearest class-level entity for a node (class, or composable function)."""
@@ -34,14 +47,10 @@ class GraphIndex:
             return self._lift_cache[node_id]
         cur, res = self.nodes.get(node_id), None
         while cur is not None:
-            parent = self.nodes.get(cur.parent_id) if cur.parent_id else None
-            python_function = (cur.language == "python"
-                               and cur.type in ("function", "constructor")
-                               and parent is not None and parent.type == "file")
-            if python_function:
+            if self._is_python_top_level_function(cur):
                 res = cur.id
                 break
-            if cur.type in CLASS_LIKE or "composable" in cur.roles:
+            if self._is_class_level_node(cur):
                 res = cur.id
                 break
             if cur.type in ("file", "package", "repository", "layout"):
@@ -85,20 +94,17 @@ class GraphIndex:
         for e in lifted:
             adj[e["source"]].add(e["target"])
             adj[e["target"]].add(e["source"])
-        def is_python_top_level_function(node: GraphNode) -> bool:
-            parent = self.nodes.get(node.parent_id) if node.parent_id else None
-            return (node.language == "python" and node.type in ("function", "constructor")
-                    and parent is not None and parent.type == "file")
 
         seeds = [n for n in self.doc.nodes
                  if (n.roles and (n.type in CLASS_LIKE or "composable" in n.roles))
-                 or (n.language == "python" and (n.type in CLASS_LIKE or is_python_top_level_function(n)))]
+                 or (n.language == "python"
+                     and (n.type in CLASS_LIKE or self._is_python_top_level_function(n)))]
         seeds.sort(key=lambda n: (min((ROLE_ORDER.index(r) for r in n.roles if r in ROLE_ORDER), default=99),
                                   n.qualified_name))
         chosen: list[str] = [n.id for n in seeds]
         if not chosen:
             cands = [n for n in self.doc.nodes
-                     if n.type in CLASS_LIKE or is_python_top_level_function(n)]
+                     if n.type in CLASS_LIKE or self._is_python_top_level_function(n)]
             cands.sort(key=lambda n: -len(adj.get(n.id, ())))
             chosen = [n.id for n in cands]
         chosen = chosen[:limit]
@@ -113,7 +119,7 @@ class GraphIndex:
         edges = [e for e in lifted if e["source"] in sel and e["target"] in sel]
         total_candidates = sum(
             1 for n in self.doc.nodes
-            if n.type in CLASS_LIKE or "composable" in n.roles or is_python_top_level_function(n))
+            if self._is_class_level_node(n) or self._is_python_top_level_function(n))
         return {"nodes": [self.node_dict(self.nodes[i]) for i in sel], "edges": edges,
                 "total_class_level_nodes": total_candidates, "truncated": total_candidates > len(sel),
                 "entry_points": len(seeds)}
@@ -153,7 +159,7 @@ class GraphIndex:
                               "target": node_id, "status": "confirmed", "count": 1})
             return self._pack(nodes, edges, limit)
 
-        class_level = node.type in CLASS_LIKE or "composable" in node.roles
+        class_level = self._is_class_level_node(node)
         frontier = {node_id}
         seen = {node_id}
         if class_level:
