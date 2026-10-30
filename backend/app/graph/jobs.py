@@ -4,6 +4,7 @@ import logging
 import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from ..analyzer.pipeline import analyze_repository
 from ..config import Settings
@@ -17,37 +18,57 @@ from ..storage.graph_store import GraphStore
 log = logging.getLogger("codeatlas.jobs")
 STREAM_NODE_LIMIT = 240
 STREAM_EDGE_LIMIT = 1200
+JobKey = tuple[str, str, str]
+RepositoryKey = tuple[str, str]
+GraphItems = tuple[dict[str, GraphNode], dict[str, GraphEdge]]
 
 
 class JobManager:
     def __init__(self, settings: Settings, store: GraphStore, git: GitService, github_factory=None):
         self.settings, self.store, self.git = settings, store, git
         self.github_factory = github_factory or (lambda token: GitHubClient(token, settings))
-        self.jobs: dict[tuple, JobStatus] = {}
-        self._graphs: dict[tuple, tuple[dict[str, GraphNode], dict[str, GraphEdge]]] = {}
+        self.jobs: dict[JobKey, JobStatus] = {}
+        self._graphs: dict[JobKey, GraphItems] = {}
         self._lock = threading.Lock()
-        self._repo_locks: dict[tuple, threading.Lock] = {}
-        self._listeners: dict[tuple, set[queue.Queue[JobStatus]]] = {}
+        self._repo_locks: dict[RepositoryKey, threading.Lock] = {}
+        self._listeners: dict[JobKey, set[queue.Queue[JobStatus]]] = {}
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="indexer")
 
     @staticmethod
-    def key(owner: str, repo: str, branch: str) -> tuple:
+    def key(owner: str, repo: str, branch: str) -> JobKey:
         return (owner.lower(), repo.lower(), branch)
+
+    def _status_snapshot(
+        self,
+        key: JobKey,
+        node_limit: int | None = None,
+        edge_limit: int | None = None,
+    ) -> JobStatus | None:
+        job = self.jobs.get(key)
+        if job is None:
+            return None
+        nodes, edges = self._graphs.get(key, ({}, {}))
+        node_items = list(nodes.values())
+        edge_items = list(edges.values())
+        if node_limit is not None:
+            node_items = node_items[:node_limit]
+        if edge_limit is not None:
+            edge_items = edge_items[:edge_limit]
+        return job.model_copy(update={"nodes": node_items, "edges": edge_items})
 
     def status(self, owner: str, repo: str, branch: str) -> JobStatus:
         with self._lock:
             key = self.key(owner, repo, branch)
-            job = self.jobs.get(key)
-            if job is not None:
-                nodes, edges = self._graphs.get(key, ({}, {}))
-                return job.model_copy(update={"nodes": list(nodes.values()), "edges": list(edges.values())})
+            snapshot = self._status_snapshot(key)
+            if snapshot is not None:
+                return snapshot
         sha = self.store.latest_sha(owner, repo, branch)
         if sha:
             return JobStatus(state="ready", stage="ready", percent=100, commit_sha=sha, cached=True,
                              message="Graph available")
         return JobStatus()
 
-    def _set(self, key: tuple, **kw) -> None:
+    def _set(self, key: JobKey, **kw: Any) -> None:
         with self._lock:
             job = self.jobs.setdefault(key, JobStatus())
             node_updates = kw.pop("node_updates", [])
@@ -96,17 +117,18 @@ class JobManager:
         listener: queue.Queue[JobStatus] = queue.Queue(maxsize=1)
         with self._lock:
             self._listeners.setdefault(key, set()).add(listener)
-            job = self.jobs.get(key)
-            if job is not None:
-                nodes, edges = self._graphs.get(key, ({}, {}))
-                initial = job.model_copy(update={
-                    "nodes": list(nodes.values())[:STREAM_NODE_LIMIT],
-                    "edges": list(edges.values())[:STREAM_EDGE_LIMIT],
-                })
+            initial = self._status_snapshot(key, STREAM_NODE_LIMIT, STREAM_EDGE_LIMIT)
+            if initial is not None:
                 self._publish(listener, initial)
         return listener
 
-    def unsubscribe(self, owner: str, repo: str, branch: str, listener: queue.Queue[JobStatus]) -> None:
+    def unsubscribe(
+        self,
+        owner: str,
+        repo: str,
+        branch: str,
+        listener: queue.Queue[JobStatus],
+    ) -> None:
         key = self.key(owner, repo, branch)
         with self._lock:
             listeners = self._listeners.get(key)
@@ -140,7 +162,15 @@ class JobManager:
         self.executor.submit(self._run, token, owner, repo, branch, force, key)
         return self.status(owner, repo, branch)
 
-    def _run(self, token: str, owner: str, repo: str, branch: str, force: bool, key: tuple) -> None:
+    def _run(
+        self,
+        token: str,
+        owner: str,
+        repo: str,
+        branch: str,
+        force: bool,
+        key: JobKey,
+    ) -> None:
         with self._lock:
             lock = self._repo_locks.setdefault((key[0], key[1]), threading.Lock())
         try:
