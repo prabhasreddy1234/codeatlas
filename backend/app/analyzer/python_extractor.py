@@ -181,16 +181,18 @@ class _BodyVisitor(ast.NodeVisitor):
     def visit_Lambda(self, _node: ast.Lambda) -> None:
         return
 
-    def visit_Call(self, node: ast.Call) -> None:
+    def _call_details(self, node: ast.Call) -> tuple[str, str | None, str]:
         fn = node.func
         if isinstance(fn, ast.Name):
-            name, receiver = fn.id, None
-        elif isinstance(fn, ast.Attribute):
-            name, receiver = fn.attr, _receiver(fn.value)
-        else:
-            name, receiver = _expr_name(fn), None
+            return fn.id, None, "new" if fn.id[:1].isupper() else "call"
+        if isinstance(fn, ast.Attribute):
+            return fn.attr, _receiver(fn.value), "call"
+        name = _expr_name(fn)
+        return name, None, "new" if name[:1].isupper() else "call"
+
+    def visit_Call(self, node: ast.Call) -> None:
+        name, receiver, kind = self._call_details(node)
         if name:
-            kind = "new" if receiver is None and name[:1].isupper() else "call"
             self.target.calls.append(CallSite(
                 name, receiver, _line(node), len(node.args) + len(node.keywords), kind))
             if kind == "new" and not isinstance(self.target, ParsedFile):
@@ -242,24 +244,11 @@ class _BodyVisitor(ast.NodeVisitor):
 def _function(node: ast.FunctionDef | ast.AsyncFunctionDef,
               owner: str | None = None) -> tuple[FuncDecl, list[FieldDecl]]:
     kind = "constructor" if owner and node.name == "__init__" else "function"
-    args = node.args
-    all_args = [*args.posonlyargs, *args.args, *args.kwonlyargs]
-    if args.vararg:
-        all_args.append(args.vararg)
-    if args.kwarg:
-        all_args.append(args.kwarg)
-    if owner:
-        all_args = [arg for arg in all_args if arg.arg not in ("self", "cls")]
-    params = [Param(arg.arg, _annotation_type(arg.annotation)) for arg in all_args]
-    annotations = [_expr_name(dec) for dec in node.decorator_list if _expr_name(dec)]
+    parameters = _function_parameters(node.args, owner)
     ret = _annotation_type(node.returns)
-    fd = FuncDecl(node.name, kind, _line(node), _end_line(node), params, ret, annotations)
-    for arg in all_args:
-        for name in _annotation_names(arg.annotation):
-            fd.type_uses.append(TypeUse(name, _line(arg)))
-    for name in _annotation_names(node.returns):
-        fd.type_uses.append(TypeUse(name, _line(node)))
-    fd.type_uses.extend(TypeUse(name, _line(node), "annotation") for name in annotations)
+    fd = FuncDecl(node.name, kind, _line(node), _end_line(node), parameters, ret,
+                 _decorator_names(node.decorator_list))
+    _record_function_annotations(fd, node)
     fields: list[FieldDecl] = []
     visitor = _BodyVisitor(fd, fields if kind == "constructor" else None)
     for statement in node.body:
@@ -267,19 +256,37 @@ def _function(node: ast.FunctionDef | ast.AsyncFunctionDef,
     return fd, fields
 
 
+def _function_parameters(args: ast.arguments, owner: str | None) -> list[Param]:
+    all_args = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+    if args.vararg:
+        all_args.append(args.vararg)
+    if args.kwarg:
+        all_args.append(args.kwarg)
+    if owner:
+        all_args = [arg for arg in all_args if arg.arg not in ("self", "cls")]
+    return [Param(arg.arg, _annotation_type(arg.annotation)) for arg in all_args]
+
+
+def _decorator_names(decorators: list[ast.AST]) -> list[str]:
+    return [_expr_name(dec) for dec in decorators if _expr_name(dec)]
+
+
+def _record_function_annotations(fd: FuncDecl, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+    for arg in fd.params:
+        if arg.type_name is None:
+            continue
+        for name in _annotation_names(arg.type_name):
+            fd.type_uses.append(TypeUse(name, _line(node)))
+
+    for name in _annotation_names(node.returns):
+        fd.type_uses.append(TypeUse(name, _line(node)))
+    fd.type_uses.extend(TypeUse(name, _line(node), "annotation") for name in fd.annotations)
+
+
 def _class(node: ast.ClassDef) -> TypeDecl:
     td = TypeDecl("class", node.name, _line(node), _end_line(node))
-    for base in node.bases:
-        name = _expr_name(base.value if isinstance(base, ast.Subscript) else base)
-        if name:
-            td.supers.append(SuperRef(name, _line(base), True))
-        for type_name in _type_names(base):
-            td.type_uses.append(TypeUse(type_name, _line(base)))
-    for decorator in node.decorator_list:
-        name = _expr_name(decorator)
-        if name:
-            td.annotations.append(name)
-            td.type_uses.append(TypeUse(name, _line(decorator), "annotation"))
+    _collect_class_bases(td, node)
+    _collect_class_annotations(td, node)
     for statement in node.body:
         if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
             method, fields = _function(statement, node.name)
@@ -288,13 +295,34 @@ def _class(node: ast.ClassDef) -> TypeDecl:
         elif isinstance(statement, ast.ClassDef):
             td.nested.append(_class(statement))
         else:
-            if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
-                type_name = _annotation_type(statement.annotation)
-                td.fields.append(FieldDecl(statement.target.id, type_name, _line(statement)))
-                td.type_uses.extend(TypeUse(n, _line(statement))
-                                    for n in _type_names(statement.annotation))
+            _collect_class_field(td, statement)
             _BodyVisitor(td).visit(statement)
     return td
+
+
+def _collect_class_bases(td: TypeDecl, node: ast.ClassDef) -> None:
+    for base in node.bases:
+        name = _expr_name(base.value if isinstance(base, ast.Subscript) else base)
+        if name:
+            td.supers.append(SuperRef(name, _line(base), True))
+        for type_name in _type_names(base):
+            td.type_uses.append(TypeUse(type_name, _line(base)))
+
+
+def _collect_class_annotations(td: TypeDecl, node: ast.ClassDef) -> None:
+    for decorator in node.decorator_list:
+        name = _expr_name(decorator)
+        if name:
+            td.annotations.append(name)
+            td.type_uses.append(TypeUse(name, _line(decorator), "annotation"))
+
+
+def _collect_class_field(td: TypeDecl, statement: ast.stmt) -> None:
+    if not isinstance(statement, ast.AnnAssign) or not isinstance(statement.target, ast.Name):
+        return
+    type_name = _annotation_type(statement.annotation)
+    td.fields.append(FieldDecl(statement.target.id, type_name, _line(statement)))
+    td.type_uses.extend(TypeUse(n, _line(statement)) for n in _type_names(statement.annotation))
 
 
 def _imports(tree: ast.Module, module_name: str, path: str) -> list[ImportDecl]:
