@@ -272,11 +272,16 @@ def _decorator_names(decorators: list[ast.AST]) -> list[str]:
 
 
 def _record_function_annotations(fd: FuncDecl, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-    for arg in fd.params:
-        if arg.type_name is None:
-            continue
-        for name in _annotation_names(arg.type_name):
-            fd.type_uses.append(TypeUse(name, _line(node)))
+    args = node.args
+    all_args = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+    if args.vararg:
+        all_args.append(args.vararg)
+    if args.kwarg:
+        all_args.append(args.kwarg)
+    for arg in all_args:
+        if arg.annotation is not None:
+            for name in _annotation_names(arg.annotation):
+                fd.type_uses.append(TypeUse(name, _line(arg)))
 
     for name in _annotation_names(node.returns):
         fd.type_uses.append(TypeUse(name, _line(node)))
