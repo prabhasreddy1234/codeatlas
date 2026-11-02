@@ -4,6 +4,8 @@ import sqlite3
 import threading
 from pathlib import Path
 
+SqliteParams = tuple[object, ...]
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, token_enc BLOB NOT NULL, login TEXT NOT NULL, name TEXT, avatar_url TEXT,
@@ -22,18 +24,21 @@ CREATE TABLE IF NOT EXISTS graph_access (
 
 
 class Database:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
+        self._initialize_schema()
+
+    def _initialize_schema(self) -> None:
         with self._lock:
             self._conn.executescript(SCHEMA)
             self._conn.commit()
 
-    def execute(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+    def execute(self, sql: str, params: SqliteParams = ()) -> list[sqlite3.Row]:
         with self._lock:
-            cur = self._conn.execute(sql, params)
-            rows = cur.fetchall()
+            cursor = self._conn.execute(sql, params)
+            rows = cursor.fetchall()
             self._conn.commit()
             return rows

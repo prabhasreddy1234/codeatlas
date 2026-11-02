@@ -17,7 +17,25 @@ from ..graph.index import GraphIndex
 from ..schemas.graph import GenerateRequest
 
 router = APIRouter(prefix="/api")
-_cache: "OrderedDict[tuple, GraphIndex]" = OrderedDict()
+GraphCacheKey = tuple[str, str, str, str]
+MAX_CACHED_GRAPHS = 4
+_cache: OrderedDict[GraphCacheKey, GraphIndex] = OrderedDict()
+
+
+def _type_filter(types: Optional[str]) -> set[str] | None:
+    return set(types.split(",")) if types else None
+
+
+def _cache_index(key: GraphCacheKey, index: GraphIndex) -> GraphIndex:
+    _cache[key] = index
+    while len(_cache) > MAX_CACHED_GRAPHS:
+        _cache.popitem(last=False)
+    return index
+
+
+def _require_node(index: GraphIndex, node_id: str) -> None:
+    if node_id not in index.nodes:
+        raise AppError(404, "node_not_found", "Node not found in this graph.")
 
 
 # ---- GitHub ---------------------------------------------------------------
@@ -54,10 +72,15 @@ def generate(body: GenerateRequest, request: Request, sess: Session = Depends(re
 
 
 def _check(owner: str, repo: str, branch: str, request: Request, sess: Session) -> None:
-    validate_owner(owner), validate_repo(repo), validate_branch(branch)
+    validate_owner(owner)
+    validate_repo(repo)
+    validate_branch(branch)
     if not request.app.state.store.can_access(sess.login, owner, repo):
-        raise AppError(404, "graph_not_found",
-                       "No graph for this repository. Generate it first with your GitHub account.")
+        raise AppError(
+            404,
+            "graph_not_found",
+            "No graph for this repository. Generate it first with your GitHub account.",
+        )
 
 
 def load_index(owner: str, repo: str, branch: str, request: Request, sess: Session) -> GraphIndex:
@@ -66,17 +89,14 @@ def load_index(owner: str, repo: str, branch: str, request: Request, sess: Sessi
     sha = store.latest_sha(owner, repo, branch)
     if not sha:
         raise AppError(404, "graph_not_found", "Graph has not been generated for this branch yet.")
-    key = (owner.lower(), repo.lower(), branch, sha)
+    key: GraphCacheKey = (owner.lower(), repo.lower(), branch, sha)
     if key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
     doc = store.load(owner, repo, branch, sha)
     if doc is None:
         raise AppError(404, "graph_not_found", "Stored graph file is missing; regenerate it.")
-    _cache[key] = GraphIndex(doc)
-    while len(_cache) > 4:
-        _cache.popitem(last=False)
-    return _cache[key]
+    return _cache_index(key, GraphIndex(doc))
 
 
 @router.get("/graphs/{owner}/{repo}/status")
@@ -142,7 +162,7 @@ def export_graph(owner: str, repo: str, request: Request, branch: str = Query(..
 def search(owner: str, repo: str, request: Request, branch: str = Query(...), q: str = Query("", max_length=200),
            types: Optional[str] = None, sess: Session = Depends(require_session)):
     idx = load_index(owner, repo, branch, request, sess)
-    tset = set(types.split(",")) if types else None
+    tset = _type_filter(types)
     return {"results": idx.search(q, tset)}
 
 
@@ -150,8 +170,7 @@ def search(owner: str, repo: str, request: Request, branch: str = Query(...), q:
 def node_details(owner: str, repo: str, node_id: str, request: Request, branch: str = Query(...),
                  sess: Session = Depends(require_session)):
     idx = load_index(owner, repo, branch, request, sess)
-    if node_id not in idx.nodes:
-        raise AppError(404, "node_not_found", "Node not found in this graph.")
+    _require_node(idx, node_id)
     return idx.details(node_id)
 
 
@@ -161,7 +180,6 @@ def neighbors(owner: str, repo: str, node_id: str, request: Request, branch: str
               types: Optional[str] = None, members: bool = False,
               sess: Session = Depends(require_session)):
     idx = load_index(owner, repo, branch, request, sess)
-    if node_id not in idx.nodes:
-        raise AppError(404, "node_not_found", "Node not found in this graph.")
-    tset = set(types.split(",")) if types else None
+    _require_node(idx, node_id)
+    tset = _type_filter(types)
     return idx.neighbors(node_id, direction, depth, tset, members)
