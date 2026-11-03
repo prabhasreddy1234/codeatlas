@@ -165,12 +165,10 @@ def graph_stream(owner: str, repo: str, request: Request, branch: str = Query(..
 
 @router.get("/graphs/{owner}/{repo}")
 def get_graph(owner: str, repo: str, request: Request, branch: str = Query(...),
-              limit: int = Query(120, ge=10, le=500), sess: Session = Depends(require_session)):
+              limit: int = Query(DEFAULT_GRAPH_LIMIT, ge=10, le=500),
+              sess: Session = Depends(require_session)):
     idx = load_index(owner, repo, branch, request, sess)
-    d = idx.doc
-    return {"repository": d.repository, "branch": d.branch, "commit_sha": d.commit_sha,
-            "indexed_at": d.indexed_at, "analyzer": d.analyzer, "stats": d.stats,
-            "warnings": d.warnings, "overview": idx.overview(limit)}
+    return {**_graph_payload(idx), "overview": idx.overview(limit)}
 
 
 @router.get("/graphs/{owner}/{repo}/export")
