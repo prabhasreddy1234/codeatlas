@@ -40,38 +40,46 @@ def _classify_file(rel: str, ext: str) -> str | None:
     return None
 
 
+def _store_file(res: ScanResult, rel: str, full: Path, kind: str, ext: str) -> None:
+    if kind == "src":
+        res.sources.append((rel, full, SOURCE_EXT[ext]))
+    elif kind == "layout":
+        res.layouts.append((rel, full))
+    elif kind == "nav":
+        res.navs.append((rel, full))
+
+
+def _handle_file(res: ScanResult, root: Path, full: Path, max_file_bytes: int, max_files: int) -> bool:
+    if full.is_symlink() or not full.is_file():
+        return True
+
+    rel = full.relative_to(root).as_posix()
+    ext = full.suffix.lower()
+    kind = _classify_file(rel, ext)
+    if kind is None:
+        return True
+
+    if full.stat().st_size > max_file_bytes:
+        res.skipped_large += 1
+        res.warnings.append(f"Skipped {rel}: larger than {max_file_bytes} bytes")
+        return True
+
+    if len(res.sources) >= max_files:
+        res.warnings.append(f"File limit {max_files} reached; remaining files skipped")
+        return False
+
+    _store_file(res, rel, full, kind, ext)
+    return True
+
+
 def scan(root: Path, max_file_bytes: int, max_files: int) -> ScanResult:
     """Collect repository source, layout, and navigation files while filtering noise."""
     root = root.resolve()
     res = ScanResult()
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = sorted(
-            d for d in dirnames if not _should_skip_directory(dirpath, d)
-        )
+        dirnames[:] = sorted(d for d in dirnames if not _should_skip_directory(dirpath, d))
         for fn in sorted(filenames):
             full = Path(dirpath) / fn
-            if full.is_symlink() or not full.is_file():
-                continue
-
-            rel = full.relative_to(root).as_posix()
-            ext = full.suffix.lower()
-            kind = _classify_file(rel, ext)
-            if kind is None:
-                continue
-
-            if full.stat().st_size > max_file_bytes:
-                res.skipped_large += 1
-                res.warnings.append(f"Skipped {rel}: larger than {max_file_bytes} bytes")
-                continue
-
-            if len(res.sources) >= max_files:
-                res.warnings.append(f"File limit {max_files} reached; remaining files skipped")
+            if not _handle_file(res, root, full, max_file_bytes, max_files):
                 return res
-
-            if kind == "src":
-                res.sources.append((rel, full, SOURCE_EXT[ext]))
-            elif kind == "layout":
-                res.layouts.append((rel, full))
-            else:
-                res.navs.append((rel, full))
     return res
