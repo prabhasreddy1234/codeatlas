@@ -160,24 +160,16 @@ class SymbolIndex:
         return Resolved("unresolved", None, None, f"nested type {head}.{'.'.join(rest)} not found")
 
     def _resolve_head(self, head: str, ctx: FileContext) -> Resolved:
-        for enc in ctx.enclosing:
-            if enc.decl.name == head:
-                return Resolved("confirmed", enc.fqn, enc, "lexical scope")
-            nested = self.types.get(f"{enc.fqn}.{head}")
-            if nested:
-                return Resolved("confirmed", nested.fqn, nested, "nested in enclosing type")
+        for candidate in self._enclosing_candidates(head, ctx):
+            if candidate is not None:
+                return candidate
 
         if head in ctx.explicit:
             return self._resolve_explicit_import(head, ctx)
 
-        pkg = ctx.pf.package
-        same_package = self.types.get(f"{pkg}.{head}" if pkg else head)
-        if same_package:
-            return Resolved("confirmed", same_package.fqn, same_package, "same package")
-
-        wildcard = self._resolve_wildcard_import(head, ctx)
-        if wildcard is not None:
-            return wildcard
+        for candidate in self._package_and_import_candidates(head, ctx):
+            if candidate is not None:
+                return candidate
 
         if head in BUILTINS:
             return Resolved("external", f"<builtin>.{head}", None, "language/standard library")
@@ -188,6 +180,32 @@ class SymbolIndex:
             return Resolved("unresolved", provenance=(
                 f"'{head}' was not found in wildcard imports {', '.join(ctx.wildcards[:3])}.*"))
 
+        return self._resolve_repo_simple_name(head)
+
+    def _enclosing_candidates(self, head: str, ctx: FileContext) -> list[Optional[Resolved]]:
+        candidates: list[Optional[Resolved]] = []
+        for enc in ctx.enclosing:
+            if enc.decl.name == head:
+                candidates.append(Resolved("confirmed", enc.fqn, enc, "lexical scope"))
+                continue
+            nested = self.types.get(f"{enc.fqn}.{head}")
+            if nested:
+                candidates.append(Resolved("confirmed", nested.fqn, nested, "nested in enclosing type"))
+        return candidates
+
+    def _package_and_import_candidates(self, head: str, ctx: FileContext) -> list[Optional[Resolved]]:
+        pkg = ctx.pf.package
+        same_package = self.types.get(f"{pkg}.{head}" if pkg else head)
+        if same_package:
+            return [Resolved("confirmed", same_package.fqn, same_package, "same package")]
+
+        wildcard = self._resolve_wildcard_import(head, ctx)
+        if wildcard is not None:
+            return [wildcard]
+
+        return [None]
+
+    def _resolve_repo_simple_name(self, head: str) -> Resolved:
         same = self.by_simple.get(head, [])
         if len(same) == 1:
             return Resolved("inferred", same[0].fqn, same[0],
