@@ -18,12 +18,16 @@ from ..schemas.graph import GenerateRequest
 
 router = APIRouter(prefix="/api")
 GraphCacheKey = tuple[str, str, str, str]
+DEFAULT_GRAPH_LIMIT = 120
 MAX_CACHED_GRAPHS = 4
 _cache: OrderedDict[GraphCacheKey, GraphIndex] = OrderedDict()
 
 
 def _type_filter(types: Optional[str]) -> set[str] | None:
-    return set(types.split(",")) if types else None
+    if not types:
+        return None
+    values = {value.strip() for value in types.split(",") if value.strip()}
+    return values or None
 
 
 def _cache_index(key: GraphCacheKey, index: GraphIndex) -> GraphIndex:
@@ -33,23 +37,42 @@ def _cache_index(key: GraphCacheKey, index: GraphIndex) -> GraphIndex:
     return index
 
 
+def _graph_cache_key(owner: str, repo: str, branch: str, commit_sha: str) -> GraphCacheKey:
+    return (owner.lower(), repo.lower(), branch, commit_sha)
+
+
 def _require_node(index: GraphIndex, node_id: str) -> None:
     if node_id not in index.nodes:
         raise AppError(404, "node_not_found", "Node not found in this graph.")
 
 
+def _graph_payload(index: GraphIndex) -> dict:
+    doc = index.doc
+    return {
+        "repository": doc.repository,
+        "branch": doc.branch,
+        "commit_sha": doc.commit_sha,
+        "indexed_at": doc.indexed_at,
+        "analyzer": doc.analyzer,
+        "stats": doc.stats,
+        "warnings": doc.warnings,
+    }
+
+
 # ---- GitHub ---------------------------------------------------------------
+def _filter_visible_repos(repos: list[dict], visibility: Literal["public", "private"], sess: Session) -> list[dict]:
+    if visibility == "private" and not sess.private_access:
+        return []
+    return [repo for repo in repos if repo["private"] == (visibility == "private")]
+
+
 @router.get("/github/repos")
 def list_repos(request: Request, visibility: Literal["public", "private"] = Query("public"),
                sess: Session = Depends(require_session)):
     gh = request.app.state.jobs.github_factory(sess.token)
     try:
         repos = gh.list_repos()
-        if visibility == "private" and not sess.private_access:
-            repos = []
-        else:
-            repos = [repo for repo in repos if repo["private"] == (visibility == "private")]
-        return {"repositories": repos}
+        return {"repositories": _filter_visible_repos(repos, visibility, sess)}
     finally:
         gh.close()
 
@@ -89,10 +112,12 @@ def load_index(owner: str, repo: str, branch: str, request: Request, sess: Sessi
     sha = store.latest_sha(owner, repo, branch)
     if not sha:
         raise AppError(404, "graph_not_found", "Graph has not been generated for this branch yet.")
-    key: GraphCacheKey = (owner.lower(), repo.lower(), branch, sha)
+
+    key = _graph_cache_key(owner, repo, branch, sha)
     if key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
+
     doc = store.load(owner, repo, branch, sha)
     if doc is None:
         raise AppError(404, "graph_not_found", "Stored graph file is missing; regenerate it.")
