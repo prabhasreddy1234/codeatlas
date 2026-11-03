@@ -313,121 +313,196 @@ class GraphBuilder:
             self._navigate(fi.node, target, ctx, pf, ln)
 
     # ---- call resolution ---------------------------------------------------
-    def _call(self, source: GraphNode, owner: Optional[TypeInfo], fi: Optional[FuncInfo],
-              c: CallSite, ctx: FileContext, pf: ParsedFile) -> None:
-        def emit_targets(targets: list[FuncInfo], status: str, why: str) -> None:
-            for t in targets[:6]:
-                self.edge("CALLS", source.id, t.node.id, status=status, provenance=why,
-                          file_path=pf.path, line=c.line)
+    def _emit_call_targets(self, source: GraphNode, c: CallSite, pf: ParsedFile,
+                           targets: list[FuncInfo], status: str, why: str) -> None:
+        for target in targets[:6]:
+            self.edge("CALLS", source.id, target.node.id, status=status, provenance=why,
+                      file_path=pf.path, line=c.line)
 
-        def unresolved(why: str) -> None:
-            label = f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}"
-            self.counters["unresolved_calls"] += 1
-            self.edge("CALLS", source.id, None, status="unresolved", target_name=label,
-                      provenance=why, file_path=pf.path, line=c.line)
+    def _pick_call_matches(self, c: CallSite, cands: list[FuncInfo]) -> tuple[list[FuncInfo], str]:
+        exact = [m for m in cands if len(m.decl.params) == c.argc]
+        if len(exact) == 1:
+            return exact, "confirmed"
+        if len(exact) > 1:
+            return exact, "inferred"
+        loose = [m for m in cands if len(m.decl.params) >= c.argc]
+        if len(loose) == 1:
+            return loose, "inferred"
+        return [], "unresolved"
 
-        def external(fqn: str, why: str) -> None:
-            self.edge("CALLS", source.id, None, status="external", target_name=fqn,
-                      provenance=why, file_path=pf.path, line=c.line)
-
-        def pick(cands: list[FuncInfo]) -> tuple[list[FuncInfo], str]:
-            exact = [m for m in cands if len(m.decl.params) == c.argc]
-            if len(exact) == 1:
-                return exact, "confirmed"
-            if len(exact) > 1:
-                return exact, "inferred"
-            loose = [m for m in cands if len(m.decl.params) >= c.argc]
-            if len(loose) == 1:
-                return loose, "inferred"
-            return [], "unresolved"
-
-        def via_type(r: Resolved, label: str) -> None:
-            if r.info is not None:
-                cands = self.index.find_methods(r.info, c.name)
-                chosen, st = pick(cands)
-                if chosen:
-                    iface = any(m.owner and m.owner.decl.kind == "interface" for m in chosen)
-                    why = f"{label} -> {r.info.fqn} ({r.provenance})"
-                    if iface:
-                        why += "; declared on interface, runtime dispatch may reach implementations"
-                    if r.status == "inferred" and st == "confirmed":
-                        st = "inferred"
-                    emit_targets(chosen, st, why)
-                    return
-                ext = self.index.external_supers(r.info)
-                ext_fn = [f for f in self.index.functions_by_name.get(c.name, []) if f.decl.receiver_type]
-                if len(ext_fn) == 1:
-                    emit_targets(ext_fn, "inferred", "extension function matched by name only")
-                    return
-                unresolved(f"method not declared in {r.info.fqn}"
-                           + (f"; may be inherited from {ext[0]}" if ext else ""))
-            elif r.status == "external":
-                external(f"{r.fqn}.{c.name}", f"{label}: receiver type outside repository")
-            else:
-                unresolved(f"{label}: receiver type unresolved ({r.provenance})")
-
-        # constructor invocation
-        if c.receiver is None and (c.kind == "new" or c.name[:1].isupper()):
-            r = self.index.resolve_type(c.name, ctx)
-            if r.info is not None:
-                ctors = [m for m in r.info.methods if m.decl.kind == "constructor"]
-                chosen, st = pick(ctors)
-                if chosen:
-                    emit_targets(chosen, st if r.status == "confirmed" else "inferred",
-                                 f"constructor of {r.info.fqn} ({r.provenance})")
-                self.edge("USES", source.id, r.info.node.id, status=r.status,
-                          provenance=f"instantiation via {r.provenance}", file_path=pf.path, line=c.line)
-                return
+    def _resolve_call_on_type(self, source: GraphNode, c: CallSite, pf: ParsedFile, r: Resolved,
+                             label: str) -> bool:
+        if r.info is None:
             if r.status == "external":
-                external(f"{r.fqn}.<init>", "constructor of type outside repository")
-                return
-            if c.kind == "new":
-                unresolved(f"constructor of unresolved type ({r.provenance})")
-                return
+                self.edge("CALLS", source.id, None, status="external", target_name=f"{r.fqn}.{c.name}",
+                          provenance=f"{label}: receiver type outside repository",
+                          file_path=pf.path, line=c.line)
+            else:
+                self.counters["unresolved_calls"] += 1
+                self.edge("CALLS", source.id, None, status="unresolved",
+                          target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
+                          provenance=f"{label}: receiver type unresolved ({r.provenance})",
+                          file_path=pf.path, line=c.line)
+            return True
 
+        cands = self.index.find_methods(r.info, c.name)
+        chosen, st = self._pick_call_matches(c, cands)
+        if chosen:
+            iface = any(m.owner and m.owner.decl.kind == "interface" for m in chosen)
+            why = f"{label} -> {r.info.fqn} ({r.provenance})"
+            if iface:
+                why += "; declared on interface, runtime dispatch may reach implementations"
+            if r.status == "inferred" and st == "confirmed":
+                st = "inferred"
+            self._emit_call_targets(source, c, pf, chosen, st, why)
+            return True
+
+        ext = self.index.external_supers(r.info)
+        ext_fn = [f for f in self.index.functions_by_name.get(c.name, []) if f.decl.receiver_type]
+        if len(ext_fn) == 1:
+            self._emit_call_targets(source, c, pf, ext_fn, "inferred",
+                                   "extension function matched by name only")
+            return True
+
+        self.counters["unresolved_calls"] += 1
+        self.edge("CALLS", source.id, None, status="unresolved",
+                  target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
+                  provenance=f"method not declared in {r.info.fqn}"
+                             + (f"; may be inherited from {ext[0]}" if ext else ""),
+                  file_path=pf.path, line=c.line)
+        return True
+
+    def _resolve_constructor_call(self, source: GraphNode, c: CallSite, ctx: FileContext,
+                                 pf: ParsedFile) -> bool:
+        if not (c.receiver is None and (c.kind == "new" or c.name[:1].isupper())):
+            return False
+
+        r = self.index.resolve_type(c.name, ctx)
+        if r.info is not None:
+            ctors = [m for m in r.info.methods if m.decl.kind == "constructor"]
+            chosen, st = self._pick_call_matches(c, ctors)
+            if chosen:
+                self._emit_call_targets(source, c, pf, chosen,
+                                       st if r.status == "confirmed" else "inferred",
+                                       f"constructor of {r.info.fqn} ({r.provenance})")
+            self.edge("USES", source.id, r.info.node.id, status=r.status,
+                      provenance=f"instantiation via {r.provenance}", file_path=pf.path, line=c.line)
+            return True
+        if r.status == "external":
+            self.edge("CALLS", source.id, None, status="external", target_name=f"{r.fqn}.<init>",
+                      provenance="constructor of type outside repository",
+                      file_path=pf.path, line=c.line)
+            return True
+        if c.kind == "new":
+            self.counters["unresolved_calls"] += 1
+            self.edge("CALLS", source.id, None, status="unresolved",
+                      target_name=c.name, provenance=f"constructor of unresolved type ({r.provenance})",
+                      file_path=pf.path, line=c.line)
+        return True
+
+    def _resolve_python_module_call(self, source: GraphNode, owner: Optional[TypeInfo],
+                                   c: CallSite, ctx: FileContext, pf: ParsedFile) -> bool:
+        if pf.language != "python":
+            return False
+        recv = c.receiver
+        if recv is None:
+            return False
+        for imp in pf.imports:
+            imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
+            if imp.module and (recv == imp.path or recv == imported_name):
+                module = imp.path
+            elif not imp.module and imp.path in self.pkg_nodes and recv == imported_name:
+                module = imp.path
+            else:
+                continue
+            imported_type = self.index.resolve_type(
+                f"{module}.{c.name}", self.index.context(pf, owner.chain() if owner else []))
+            if imported_type.info is not None and c.name[:1].isupper():
+                constructors = [m for m in imported_type.info.methods if m.decl.kind == "constructor"]
+                chosen, st = self._pick_call_matches(c, constructors)
+                if chosen:
+                    self._emit_call_targets(source, c, pf, chosen, st,
+                                           f"constructor of {imported_type.info.fqn} via import {imp.path}")
+                self.edge("USES", source.id, imported_type.info.node.id,
+                          status=imported_type.status,
+                          provenance=f"instantiation via imported module {imp.path}",
+                          file_path=pf.path, line=c.line)
+                return True
+            cands = self.index.functions.get(f"{module}.{c.name}", [])
+            chosen, st = self._pick_call_matches(c, cands)
+            if chosen:
+                self._emit_call_targets(source, c, pf, chosen, st, f"module function via import {imp.path}")
+                return True
+            self.counters["unresolved_calls"] += 1
+            self.edge("CALLS", source.id, None, status="unresolved",
+                      target_name=c.name,
+                      provenance=f"function `{c.name}` not declared in imported module {module}",
+                      file_path=pf.path, line=c.line)
+            return True
+        return False
+
+    def _var_type(self, owner: Optional[TypeInfo], fi: Optional[FuncInfo], ctx: FileContext,
+                  name: str) -> tuple[Optional[str], FileContext]:
         locals_ = fi.decl.locals if fi else {}
         params = {p.name: p.type_name for p in fi.decl.params} if fi else {}
+        if name in locals_:
+            return locals_[name], ctx
+        if params.get(name):
+            return params[name], ctx
+        if owner is not None:
+            for scope in owner.chain():
+                tn, declarer = self.index.find_field(scope, name)
+                if tn:
+                    return tn, self.index.context(declarer.pf, declarer.chain())
+        return None, ctx
 
-        def var_type(name: str) -> tuple[Optional[str], FileContext]:
-            if name in locals_:
-                return locals_[name], ctx
-            if params.get(name):
-                return params[name], ctx
-            if owner is not None:
-                for scope in owner.chain():
-                    tn, declarer = self.index.find_field(scope, name)
-                    if tn:
-                        return tn, self.index.context(declarer.pf, declarer.chain())
-            return None, ctx
+    def _call(self, source: GraphNode, owner: Optional[TypeInfo], fi: Optional[FuncInfo],
+              c: CallSite, ctx: FileContext, pf: ParsedFile) -> None:
+        if self._resolve_constructor_call(source, c, ctx, pf):
+            return
 
         recv = c.receiver
         if recv == "<complex>":
-            unresolved("receiver is a call chain or complex expression; no static type available")
+            self.counters["unresolved_calls"] += 1
+            self.edge("CALLS", source.id, None, status="unresolved",
+                      target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
+                      provenance="receiver is a call chain or complex expression; no static type available",
+                      file_path=pf.path, line=c.line)
             return
         if recv == "super":
             if owner is None:
-                unresolved("super call outside a class")
+                self.counters["unresolved_calls"] += 1
+                self.edge("CALLS", source.id, None, status="unresolved",
+                          target_name=c.name, provenance="super call outside a class",
+                          file_path=pf.path, line=c.line)
                 return
-            for s in owner.supers:
-                if s.res.info is not None:
-                    cands = self.index.find_methods(s.res.info, c.name)
-                    chosen, st = pick(cands)
+            for scope in owner.supers:
+                if scope.res.info is not None:
+                    cands = self.index.find_methods(scope.res.info, c.name)
+                    chosen, st = self._pick_call_matches(c, cands)
                     if chosen:
-                        emit_targets(chosen, st, f"super call via {s.res.info.fqn}")
+                        self._emit_call_targets(source, c, pf, chosen, st,
+                                               f"super call via {scope.res.info.fqn}")
                         return
             ext = self.index.external_supers(owner)
             if ext:
-                external(f"{ext[0]}.{c.name}", "super call to supertype outside repository")
+                self.edge("CALLS", source.id, None, status="external", target_name=f"{ext[0]}.{c.name}",
+                          provenance="super call to supertype outside repository",
+                          file_path=pf.path, line=c.line)
             else:
-                unresolved("super method not found")
+                self.counters["unresolved_calls"] += 1
+                self.edge("CALLS", source.id, None, status="unresolved",
+                          target_name=c.name, provenance="super method not found",
+                          file_path=pf.path, line=c.line)
             return
         if recv is None or recv == "this":
             if owner is not None:
                 for scope in owner.chain():
                     cands = self.index.find_methods(scope, c.name)
-                    chosen, st = pick(cands)
+                    chosen, st = self._pick_call_matches(c, cands)
                     if chosen:
-                        emit_targets(chosen, st, f"method of {scope.fqn} (or its supertypes)")
+                        self._emit_call_targets(source, c, pf, chosen, st,
+                                               f"method of {scope.fqn} (or its supertypes)")
                         return
             if recv is None:
                 pkg = pf.package
@@ -438,70 +513,55 @@ class GraphBuilder:
                         fn_cands += self.index.functions.get(imp.path, [])
                     elif imp.wildcard:
                         fn_cands += self.index.functions.get(f"{imp.path}.{c.name}", [])
-                chosen, st = pick(fn_cands)
+                chosen, st = self._pick_call_matches(c, fn_cands)
                 if chosen:
-                    emit_targets(chosen, st, "top-level function (same package or import)")
+                    self._emit_call_targets(source, c, pf, chosen, st,
+                                           "top-level function (same package or import)")
                     return
                 for imp in pf.imports:
                     imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
                     if imported_name == c.name and not imp.module and not imp.wildcard \
                             and imp.path not in self.index.types:
-                        external(imp.path, f"imported function {imp.path} (outside repository)")
+                        self.edge("CALLS", source.id, None, status="external", target_name=imp.path,
+                                  provenance=f"imported function {imp.path} (outside repository)",
+                                  file_path=pf.path, line=c.line)
                         return
             ext = self.index.external_supers(owner) if owner else []
-            unresolved("no matching declaration in repository"
-                       + (f"; may be inherited from {ext[0]}" if ext else "; may be a framework/library call"))
+            self.counters["unresolved_calls"] += 1
+            self.edge("CALLS", source.id, None, status="unresolved",
+                      target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
+                      provenance="no matching declaration in repository"
+                                + (f"; may be inherited from {ext[0]}" if ext else "; may be a framework/library call"),
+                      file_path=pf.path, line=c.line)
             return
-        # explicit receiver
-        if pf.language == "python":
-            for imp in pf.imports:
-                imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
-                if imp.module and (recv == imp.path or recv == imported_name):
-                    module = imp.path
-                elif not imp.module and imp.path in self.pkg_nodes and recv == imported_name:
-                    module = imp.path
-                else:
-                    continue
-                imported_type = self.index.resolve_type(
-                    f"{module}.{c.name}", self.index.context(pf, owner.chain() if owner else []))
-                if imported_type.info is not None and c.name[:1].isupper():
-                    constructors = [m for m in imported_type.info.methods
-                                    if m.decl.kind == "constructor"]
-                    chosen, st = pick(constructors)
-                    if chosen:
-                        emit_targets(chosen, st,
-                                     f"constructor of {imported_type.info.fqn} via import {imp.path}")
-                    self.edge("USES", source.id, imported_type.info.node.id,
-                              status=imported_type.status,
-                              provenance=f"instantiation via imported module {imp.path}",
-                              file_path=pf.path, line=c.line)
-                    return
-                cands = self.index.functions.get(f"{module}.{c.name}", [])
-                chosen, st = pick(cands)
-                if chosen:
-                    emit_targets(chosen, st, f"module function via import {imp.path}")
-                    return
-                unresolved(f"function `{c.name}` not declared in imported module {module}")
-                return
+
+        if self._resolve_python_module_call(source, owner, c, ctx, pf):
+            return
+
         parts = recv.split(".")
         if parts[0] == "this" and len(parts) == 2:
-            tn, fctx = var_type(parts[1])
+            tn, fctx = self._var_type(owner, fi, ctx, parts[1])
             label = f"field `{parts[1]}`"
         elif len(parts) == 1:
-            tn, fctx = var_type(parts[0])
+            tn, fctx = self._var_type(owner, fi, ctx, parts[0])
             label = f"variable `{parts[0]}`"
         else:
             tn, fctx = None, ctx
             label = ""
         if tn:
-            via_type(self.index.resolve_type(tn, fctx), label)
+            self._resolve_call_on_type(source, c, pf,
+                                      self.index.resolve_type(tn, fctx), label)
             return
-        # static / object / companion access
+
         r = self.index.resolve_type(recv, ctx)
         if r.status != "unresolved":
-            via_type(r, f"static/object access `{recv}`")
+            self._resolve_call_on_type(source, c, pf, r, f"static/object access `{recv}`")
             return
-        unresolved(f"receiver `{recv}` has no known declared type")
+        self.counters["unresolved_calls"] += 1
+        self.edge("CALLS", source.id, None, status="unresolved",
+                  target_name=f"{recv}.{c.name}",
+                  provenance=f"receiver `{recv}` has no known declared type",
+                  file_path=pf.path, line=c.line)
 
     # ---- XML resources -----------------------------------------------------
     def add_layout(self, rel: str) -> None:
