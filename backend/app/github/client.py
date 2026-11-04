@@ -14,9 +14,20 @@ class GitHubClient:
 
     def __init__(self, token: str, settings: Settings, transport: httpx.BaseTransport | None = None):
         self._client = httpx.Client(
-            base_url=settings.github_api_url, timeout=20, transport=transport,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
-                     "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "CodeAtlas"})
+            base_url=settings.github_api_url,
+            timeout=20,
+            transport=transport,
+            headers=self._headers(token),
+        )
+
+    @staticmethod
+    def _headers(token: str) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "CodeAtlas",
+        }
 
     def close(self) -> None:
         self._client.close()
@@ -55,6 +66,22 @@ class GitHubClient:
                 break
             page += 1
         return out[:max_items]
+
+    @staticmethod
+    def _repo_summary(repository: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": repository["id"],
+            "name": repository["name"],
+            "owner": repository["owner"]["login"],
+            "full_name": repository["full_name"],
+            "private": bool(repository["private"]),
+            "visibility": repository.get("visibility")
+            or ("private" if repository["private"] else "public"),
+            "default_branch": repository.get("default_branch") or "main",
+            "description": repository.get("description"),
+            "archived": bool(repository.get("archived")),
+            "language": repository.get("language"),
+        }
 
     def get_user(self) -> dict:
         return self._get("/user")
