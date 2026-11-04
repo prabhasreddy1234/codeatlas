@@ -56,17 +56,24 @@ class JobManager:
             edge_items = edge_items[:edge_limit]
         return job.model_copy(update={"nodes": node_items, "edges": edge_items})
 
+    def _repository_lock(self, key: JobKey) -> threading.Lock:
+        repo_key = (key[0], key[1])
+        return self._repo_locks.setdefault(repo_key, threading.Lock())
+
+    def _ready_snapshot(self, owner: str, repo: str, branch: str) -> JobStatus:
+        sha = self.store.latest_sha(owner, repo, branch)
+        if sha:
+            return JobStatus(state="ready", stage="ready", percent=100, commit_sha=sha, cached=True,
+                             message="Graph available")
+        return JobStatus()
+
     def status(self, owner: str, repo: str, branch: str) -> JobStatus:
         with self._lock:
             key = self.key(owner, repo, branch)
             snapshot = self._status_snapshot(key)
             if snapshot is not None:
                 return snapshot
-        sha = self.store.latest_sha(owner, repo, branch)
-        if sha:
-            return JobStatus(state="ready", stage="ready", percent=100, commit_sha=sha, cached=True,
-                             message="Graph available")
-        return JobStatus()
+        return self._ready_snapshot(owner, repo, branch)
 
     def _set(self, key: JobKey, **kw: Any) -> None:
         with self._lock:
@@ -137,18 +144,26 @@ class JobManager:
                 if not listeners:
                     self._listeners.pop(key, None)
 
+    def _active_job(self, key: JobKey) -> JobStatus | None:
+        job = self.jobs.get(key)
+        if job is not None and job.state in ("queued", "running"):
+            return job
+        return None
+
     def start(self, token: str, login: str, owner: str, repo: str, branch: str, force: bool) -> JobStatus:
         validate_owner(owner), validate_repo(repo), validate_branch(branch)
         key = self.key(owner, repo, branch)
         with self._lock:
-            cur = self.jobs.get(key)
-            if cur is not None and cur.state in ("queued", "running"):
-                return cur.model_copy()
+            active = self._active_job(key)
+            if active is not None:
+                return active.model_copy()
+
         gh = self.github_factory(token)
         try:
-            remote = gh.get_branch(owner, repo, branch)  # also verifies the user's access
+            remote = gh.get_branch(owner, repo, branch)
         finally:
             gh.close()
+
         self.store.grant(login, owner, repo)
         sha = remote["commit_sha"]
         if not force and self.store.has(owner, repo, branch, sha):
@@ -157,6 +172,7 @@ class JobManager:
                       message="Loaded existing graph for this commit", error=None, files_total=0, files_done=0,
                       nodes=doc.nodes if doc else [], edges=doc.edges if doc else [])
             return self.status(owner, repo, branch).model_copy(update={"nodes": [], "edges": []})
+
         self._set(key, state="queued", stage="queued", percent=2, commit_sha=sha, cached=False,
                   message="Queued", error=None, files_total=0, files_done=0, nodes=[], edges=[])
         self.executor.submit(self._run, token, owner, repo, branch, force, key)
