@@ -92,22 +92,7 @@ class GitHubClient:
             {"sort": "updated", "affiliation": "owner,collaborator,organization_member"},
             max_items,
         )
-        return [
-            {
-                "id": repository["id"],
-                "name": repository["name"],
-                "owner": repository["owner"]["login"],
-                "full_name": repository["full_name"],
-                "private": bool(repository["private"]),
-                "visibility": repository.get("visibility")
-                or ("private" if repository["private"] else "public"),
-                "default_branch": repository.get("default_branch") or "main",
-                "description": repository.get("description"),
-                "archived": bool(repository.get("archived")),
-                "language": repository.get("language"),
-            }
-            for repository in raw
-        ]
+        return [self._repo_summary(repository) for repository in raw]
 
     def list_branches(self, owner: str, repo: str, max_items: int = 1000) -> list[dict]:
         raw = self._paginate(f"/repos/{owner}/{repo}/branches", {}, max_items)
