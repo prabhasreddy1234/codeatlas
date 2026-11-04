@@ -178,6 +178,22 @@ class JobManager:
         self.executor.submit(self._run, token, owner, repo, branch, force, key)
         return self.status(owner, repo, branch)
 
+    def _set_ready_state(self, key: JobKey, sha: str, *, cached: bool,
+                         message: str, doc: Any | None = None) -> None:
+        self._set(key, state="ready", stage="ready", percent=100, commit_sha=sha, cached=cached,
+                  message=message, error=None, files_total=0, files_done=0,
+                  nodes=(doc.nodes if doc else []), edges=(doc.edges if doc else []))
+
+    def _progress_callback(self, key: JobKey):
+        def progress(stage: str, done: int, total: int, msg: str, builder=None) -> None:
+            pct = 25 + int(65 * done / total) if stage == "parsing" and total else (
+                90 if stage == "resolving" else 25)
+            nodes_list, edges_list = builder.drain_changes() if builder else ([], [])
+            self._set(key, stage=stage, percent=pct, files_done=done, files_total=total, message=msg,
+                      node_updates=nodes_list, edge_updates=edges_list)
+
+        return progress
+
     def _run(
         self,
         token: str,
@@ -197,26 +213,20 @@ class JobManager:
                 self._set(key, commit_sha=sha, percent=25, message=f"Checked out {sha[:10]}")
                 if not force and self.store.has(owner, repo, branch, sha):
                     doc = self.store.load(owner, repo, branch, sha)
-                    self._set(key, state="ready", stage="ready", percent=100, cached=True,
-                              message="Graph for this commit already indexed",
-                              nodes=doc.nodes if doc else [], edges=doc.edges if doc else [])
+                    self._set_ready_state(key, sha, cached=True,
+                                          message="Graph for this commit already indexed",
+                                          doc=doc)
                     return
-
-                def progress(stage: str, done: int, total: int, msg: str, builder=None) -> None:
-                    pct = 25 + int(65 * done / total) if stage == "parsing" and total else (
-                        90 if stage == "resolving" else 25)
-                    nodes_list, edges_list = builder.drain_changes() if builder else ([], [])
-                    self._set(key, stage=stage, percent=pct, files_done=done, files_total=total, message=msg,
-                              node_updates=nodes_list, edge_updates=edges_list)
 
                 doc = analyze_repository(workdir, owner, repo, branch, sha,
                                          max_file_bytes=self.settings.max_file_bytes,
-                                         max_files=self.settings.max_files, progress=progress)
+                                         max_files=self.settings.max_files,
+                                         progress=self._progress_callback(key))
                 self._set(key, stage="saving", percent=95, message="Saving graph")
                 self.store.save(doc)
-                self._set(key, state="ready", stage="ready", percent=100, cached=False,
-                          message=f"Indexed {len(doc.nodes)} nodes and {len(doc.edges)} edges",
-                          nodes=doc.nodes, edges=doc.edges)
+                self._set_ready_state(key, sha, cached=False,
+                                      message=f"Indexed {len(doc.nodes)} nodes and {len(doc.edges)} edges",
+                                      doc=doc)
         except AppError as exc:
             self._set(key, state="failed", stage="failed", error={"code": exc.code, "message": exc.message},
                       message=exc.message)
