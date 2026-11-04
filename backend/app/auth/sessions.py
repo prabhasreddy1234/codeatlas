@@ -56,6 +56,11 @@ class SessionStore:
                 expires_at,
             ),
         )
+        return self._session_from_record(session_id, token, user, scope, csrf_token)
+
+    @staticmethod
+    def _session_from_record(session_id: str, token: str, user: Mapping[str, Any],
+                             scope: str, csrf_token: str) -> Session:
         return Session(
             id=session_id,
             token=token,

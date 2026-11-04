@@ -42,3 +42,7 @@ class Database:
             rows = cursor.fetchall()
             self._conn.commit()
             return rows
+
+    def fetchone(self, sql: str, params: SqliteParams = ()) -> sqlite3.Row | None:
+        rows = self.execute(sql, params)
+        return rows[0] if rows else None
