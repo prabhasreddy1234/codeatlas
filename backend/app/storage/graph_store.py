@@ -58,15 +58,24 @@ class GraphStore:
             ),
         )
 
-    def has(self, owner: str, repo: str, branch: str, sha: str) -> bool:
+    def _graph_record(self, owner: str, repo: str, branch: str, sha: str) -> tuple[str, str] | None:
         rows = self.db.execute(
             "SELECT path FROM graphs WHERE owner=? AND repo=? AND branch=? AND commit_sha=?",
             (owner.lower(), repo.lower(), branch, sha),
         )
-        return bool(rows) and Path(rows[0]["path"]).exists()
+        if not rows:
+            return None
+        path = rows[0]["path"]
+        return (sha, path)
+
+    def has(self, owner: str, repo: str, branch: str, sha: str) -> bool:
+        return self._graph_record(owner, repo, branch, sha) is not None and Path(
+            self._graph_record(owner, repo, branch, sha)[1]
+        ).exists()
 
     def load(self, owner: str, repo: str, branch: str, sha: str) -> GraphDocument | None:
-        if not self.has(owner, repo, branch, sha):
+        record = self._graph_record(owner, repo, branch, sha)
+        if record is None or not Path(record[1]).exists():
             return None
         path = self._path(owner, repo, branch, sha)
         return GraphDocument.model_validate_json(path.read_text(encoding="utf-8"))
