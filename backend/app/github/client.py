@@ -69,18 +69,26 @@ class GitHubClient:
 
     @staticmethod
     def _repo_summary(repository: dict[str, Any]) -> dict[str, Any]:
+        private = bool(repository.get("private"))
         return {
             "id": repository["id"],
             "name": repository["name"],
             "owner": repository["owner"]["login"],
             "full_name": repository["full_name"],
-            "private": bool(repository["private"]),
-            "visibility": repository.get("visibility")
-            or ("private" if repository["private"] else "public"),
+            "private": private,
+            "visibility": repository.get("visibility") or ("private" if private else "public"),
             "default_branch": repository.get("default_branch") or "main",
             "description": repository.get("description"),
             "archived": bool(repository.get("archived")),
             "language": repository.get("language"),
+        }
+
+    @staticmethod
+    def _branch_summary(branch: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "name": branch["name"],
+            "commit_sha": branch["commit"]["sha"],
+            "protected": bool(branch.get("protected")),
         }
 
     def get_user(self) -> dict:
@@ -96,17 +104,9 @@ class GitHubClient:
 
     def list_branches(self, owner: str, repo: str, max_items: int = 1000) -> list[dict]:
         raw = self._paginate(f"/repos/{owner}/{repo}/branches", {}, max_items)
-        return [
-            {
-                "name": branch["name"],
-                "commit_sha": branch["commit"]["sha"],
-                "protected": bool(branch.get("protected")),
-            }
-            for branch in raw
-        ]
+        return [self._branch_summary(branch) for branch in raw]
 
     def get_branch(self, owner: str, repo: str, branch: str) -> dict:
-        response = self._get(
-            f"/repos/{owner}/{repo}/branches/{quote(branch, safe='/')}"
-        )
-        return {"name": response["name"], "commit_sha": response["commit"]["sha"]}
+        response = self._get(f"/repos/{owner}/{repo}/branches/{quote(branch, safe='/')}")
+        return self._branch_summary({"name": response["name"], "commit": {"sha": response["commit"]["sha"]},
+                                      "protected": response.get("protected", False)})
