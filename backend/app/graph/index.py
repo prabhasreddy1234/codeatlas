@@ -40,6 +40,32 @@ class GraphIndex:
     def _is_class_level_node(node: GraphNode) -> bool:
         return node.type in CLASS_LIKE or "composable" in node.roles
 
+    def _is_seed_node(self, node: GraphNode) -> bool:
+        return (
+            bool(node.roles) and (node.type in CLASS_LIKE or "composable" in node.roles)
+        ) or (node.language == "python" and (node.type in CLASS_LIKE or self._is_python_top_level_function(node)))
+
+    def _seed_candidates(self) -> list[GraphNode]:
+        candidates = [node for node in self.doc.nodes if self._is_seed_node(node)]
+        candidates.sort(key=self._seed_rank)
+        return candidates
+
+    @staticmethod
+    def _seed_rank(node: GraphNode) -> tuple[int, str]:
+        role_index = min((ROLE_ORDER.index(role) for role in node.roles if role in ROLE_ORDER), default=99)
+        return (role_index, node.qualified_name)
+
+    def _overview_entry_points(self, limit: int, adj: dict[str, set[str]]) -> list[str]:
+        seeds = self._seed_candidates()
+        chosen = [node.id for node in seeds[:limit]]
+        if chosen:
+            return chosen
+
+        candidates = [node for node in self.doc.nodes
+                      if self._is_class_level_node(node) or self._is_python_top_level_function(node)]
+        candidates.sort(key=lambda node: (-len(adj.get(node.id, ())), node.qualified_name))
+        return [node.id for node in candidates[:limit]]
+
     # ---- helpers -----------------------------------------------------------
     def lift(self, node_id: str) -> Optional[str]:
         """Nearest class-level entity for a node (class, or composable function)."""
@@ -95,21 +121,8 @@ class GraphIndex:
             adj[e["source"]].add(e["target"])
             adj[e["target"]].add(e["source"])
 
-        seeds = [n for n in self.doc.nodes
-                 if (n.roles and (n.type in CLASS_LIKE or "composable" in n.roles))
-                 or (n.language == "python"
-                     and (n.type in CLASS_LIKE or self._is_python_top_level_function(n)))]
-        seeds.sort(key=lambda n: (min((ROLE_ORDER.index(r) for r in n.roles if r in ROLE_ORDER), default=99),
-                                  n.qualified_name))
-        chosen: list[str] = [n.id for n in seeds]
-        if not chosen:
-            cands = [n for n in self.doc.nodes
-                     if n.type in CLASS_LIKE or self._is_python_top_level_function(n)]
-            cands.sort(key=lambda n: -len(adj.get(n.id, ())))
-            chosen = [n.id for n in cands]
-        chosen = chosen[:limit]
+        chosen = self._overview_entry_points(limit, adj)
         sel = set(chosen)
-        # add direct dependencies of the entry points until the limit is reached
         for nid in list(chosen):
             for e in lifted:
                 if len(sel) >= limit:
@@ -122,7 +135,7 @@ class GraphIndex:
             if self._is_class_level_node(n) or self._is_python_top_level_function(n))
         return {"nodes": [self.node_dict(self.nodes[i]) for i in sel], "edges": edges,
                 "total_class_level_nodes": total_candidates, "truncated": total_candidates > len(sel),
-                "entry_points": len(seeds)}
+                "entry_points": len(self._seed_candidates())}
 
     # ---- neighbors -------------------------------------------------------------
     def neighbors(self, node_id: str, direction: str = "both", depth: int = 1,
@@ -227,6 +240,24 @@ class GraphIndex:
                 "outgoing": outgoing[:500], "incoming": incoming[:500],
                 "outgoing_total": len(outgoing), "incoming_total": len(incoming)}
 
+    @staticmethod
+    def _matches_type_filter(node: GraphNode, tset: Optional[set[str]]) -> bool:
+        return node.type != "repository" and (not tset or node.type in tset)
+
+    @staticmethod
+    def _search_score(name: str, ql: str, qn: str, fp: str) -> int | None:
+        if name == ql:
+            return 0
+        if name.startswith(ql):
+            return 1
+        if ql in name:
+            return 2
+        if ql in qn:
+            return 3
+        if ql in fp:
+            return 4
+        return None
+
     def search(self, q: str, types: Optional[Iterable[str]] = None, limit: int = 40) -> list[dict]:
         ql = q.lower().strip()
         if not ql:
@@ -234,21 +265,12 @@ class GraphIndex:
         tset = set(types) if types else None
         scored = []
         for n in self.doc.nodes:
-            if n.type in ("repository",) or (tset and n.type not in tset):
+            if not self._matches_type_filter(n, tset):
                 continue
             name, qn, fp = n.name.lower(), n.qualified_name.lower(), (n.file_path or "").lower()
-            if name == ql:
-                s = 0
-            elif name.startswith(ql):
-                s = 1
-            elif ql in name:
-                s = 2
-            elif ql in qn:
-                s = 3
-            elif ql in fp:
-                s = 4
-            else:
+            score = self._search_score(name, ql, qn, fp)
+            if score is None:
                 continue
-            scored.append((s, len(name), n))
+            scored.append((score, len(name), n))
         scored.sort(key=lambda x: (x[0], x[1], x[2].qualified_name))
         return [self.node_dict(n) for _, _, n in scored[:limit]]
