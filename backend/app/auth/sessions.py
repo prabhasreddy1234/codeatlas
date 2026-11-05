@@ -39,24 +39,34 @@ class SessionStore:
         session_id = secrets.token_urlsafe(32)
         csrf_token = secrets.token_urlsafe(32)
         now = time.time()
-        expires_at = now + self.settings.session_ttl_hours * 3600
+        expires_at = self._session_expiry(now)
 
-        self.db.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+        self._purge_expired_sessions(now)
         self.db.execute(
             "INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?)",
-            (
-                session_id,
-                self.fernet.encrypt(token.encode()),
-                user["login"],
-                user.get("name"),
-                user.get("avatar_url"),
-                scope,
-                csrf_token,
-                now,
-                expires_at,
-            ),
+            self._session_row(session_id, token, user, scope, csrf_token, now, expires_at),
         )
         return self._session_from_record(session_id, token, user, scope, csrf_token)
+
+    def _session_expiry(self, now: float) -> float:
+        return now + self.settings.session_ttl_hours * 3600
+
+    def _purge_expired_sessions(self, now: float) -> None:
+        self.db.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+
+    def _session_row(self, session_id: str, token: str, user: Mapping[str, Any],
+                     scope: str, csrf_token: str, now: float, expires_at: float) -> tuple:
+        return (
+            session_id,
+            self.fernet.encrypt(token.encode()),
+            user["login"],
+            user.get("name"),
+            user.get("avatar_url"),
+            scope,
+            csrf_token,
+            now,
+            expires_at,
+        )
 
     @staticmethod
     def _session_from_record(session_id: str, token: str, user: Mapping[str, Any],
