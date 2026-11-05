@@ -131,13 +131,7 @@ def graph_status(owner: str, repo: str, request: Request, branch: str = Query(..
     return request.app.state.jobs.status(owner, repo, branch)
 
 
-@router.get("/graphs/{owner}/{repo}/stream")
-def graph_stream(owner: str, repo: str, request: Request, branch: str = Query(...),
-                 sess: Session = Depends(require_session)):
-    _check(owner, repo, branch, request, sess)
-    jobs = request.app.state.jobs
-    listener = jobs.subscribe(owner, repo, branch)
-
+def _graph_stream_events(request: Request, jobs, owner: str, repo: str, branch: str, listener):
     async def event_generator():
         last_heartbeat = asyncio.get_running_loop().time()
         try:
@@ -156,8 +150,17 @@ def graph_stream(owner: str, repo: str, request: Request, branch: str = Query(..
         finally:
             jobs.unsubscribe(owner, repo, branch, listener)
 
+    return event_generator
+
+
+@router.get("/graphs/{owner}/{repo}/stream")
+def graph_stream(owner: str, repo: str, request: Request, branch: str = Query(...),
+                 sess: Session = Depends(require_session)):
+    _check(owner, repo, branch, request, sess)
+    jobs = request.app.state.jobs
+    listener = jobs.subscribe(owner, repo, branch)
     return StreamingResponse(
-        event_generator(),
+        _graph_stream_events(request, jobs, owner, repo, branch, listener)(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
