@@ -91,6 +91,13 @@ class GitHubClient:
             "protected": bool(branch.get("protected")),
         }
 
+    @staticmethod
+    def _branch_ref_summary(name: str, sha: str) -> dict[str, Any]:
+        return {
+            "name": name,
+            "commit_sha": sha,
+        }
+
     def get_user(self) -> dict:
         return self._get("/user")
 
@@ -108,5 +115,4 @@ class GitHubClient:
 
     def get_branch(self, owner: str, repo: str, branch: str) -> dict:
         response = self._get(f"/repos/{owner}/{repo}/branches/{quote(branch, safe='/')}")
-        return self._branch_summary({"name": response["name"], "commit": {"sha": response["commit"]["sha"]},
-                                      "protected": response.get("protected", False)})
+        return self._branch_ref_summary(response["name"], response["commit"]["sha"])
