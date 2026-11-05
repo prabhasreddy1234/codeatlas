@@ -313,6 +313,23 @@ class GraphBuilder:
             self._navigate(fi.node, target, ctx, pf, ln)
 
     # ---- call resolution ---------------------------------------------------
+    @staticmethod
+    def _call_target_name(c: CallSite) -> str:
+        receiver = c.receiver
+        if receiver and receiver != "<complex>":
+            return f"{receiver}.{c.name}"
+        return c.name
+
+    def _record_call_result(self, source: GraphNode, pf: ParsedFile, c: CallSite,
+                           *, status: str, provenance: str,
+                           target_id: Optional[str] = None,
+                           target_name: Optional[str] = None) -> None:
+        if status == "unresolved":
+            self.counters["unresolved_calls"] += 1
+        self.edge("CALLS", source.id, target_id, status=status,
+                  target_name=target_name or self._call_target_name(c),
+                  provenance=provenance, file_path=pf.path, line=c.line)
+
     def _emit_call_targets(self, source: GraphNode, c: CallSite, pf: ParsedFile,
                            targets: list[FuncInfo], status: str, why: str) -> None:
         for target in targets[:6]:
@@ -334,15 +351,12 @@ class GraphBuilder:
                              label: str) -> bool:
         if r.info is None:
             if r.status == "external":
-                self.edge("CALLS", source.id, None, status="external", target_name=f"{r.fqn}.{c.name}",
-                          provenance=f"{label}: receiver type outside repository",
-                          file_path=pf.path, line=c.line)
+                self._record_call_result(source, pf, c, status="external",
+                                         provenance=f"{label}: receiver type outside repository",
+                                         target_name=f"{r.fqn}.{c.name}")
             else:
-                self.counters["unresolved_calls"] += 1
-                self.edge("CALLS", source.id, None, status="unresolved",
-                          target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
-                          provenance=f"{label}: receiver type unresolved ({r.provenance})",
-                          file_path=pf.path, line=c.line)
+                self._record_call_result(source, pf, c, status="unresolved",
+                                         provenance=f"{label}: receiver type unresolved ({r.provenance})")
             return True
 
         cands = self.index.find_methods(r.info, c.name)
@@ -364,12 +378,9 @@ class GraphBuilder:
                                    "extension function matched by name only")
             return True
 
-        self.counters["unresolved_calls"] += 1
-        self.edge("CALLS", source.id, None, status="unresolved",
-                  target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
-                  provenance=f"method not declared in {r.info.fqn}"
-                             + (f"; may be inherited from {ext[0]}" if ext else ""),
-                  file_path=pf.path, line=c.line)
+        self._record_call_result(source, pf, c, status="unresolved",
+                                 provenance=f"method not declared in {r.info.fqn}"
+                                            + (f"; may be inherited from {ext[0]}" if ext else ""))
         return True
 
     def _resolve_constructor_call(self, source: GraphNode, c: CallSite, ctx: FileContext,
