@@ -400,15 +400,14 @@ class GraphBuilder:
                       provenance=f"instantiation via {r.provenance}", file_path=pf.path, line=c.line)
             return True
         if r.status == "external":
-            self.edge("CALLS", source.id, None, status="external", target_name=f"{r.fqn}.<init>",
-                      provenance="constructor of type outside repository",
-                      file_path=pf.path, line=c.line)
+            self._record_call_result(source, pf, c, status="external",
+                                     target_name=f"{r.fqn}.<init>",
+                                     provenance="constructor of type outside repository")
             return True
         if c.kind == "new":
-            self.counters["unresolved_calls"] += 1
-            self.edge("CALLS", source.id, None, status="unresolved",
-                      target_name=c.name, provenance=f"constructor of unresolved type ({r.provenance})",
-                      file_path=pf.path, line=c.line)
+            self._record_call_result(source, pf, c, status="unresolved",
+                                     target_name=c.name,
+                                     provenance=f"constructor of unresolved type ({r.provenance})")
         return True
 
     def _resolve_python_module_call(self, source: GraphNode, owner: Optional[TypeInfo],
@@ -444,11 +443,9 @@ class GraphBuilder:
             if chosen:
                 self._emit_call_targets(source, c, pf, chosen, st, f"module function via import {imp.path}")
                 return True
-            self.counters["unresolved_calls"] += 1
-            self.edge("CALLS", source.id, None, status="unresolved",
-                      target_name=c.name,
-                      provenance=f"function `{c.name}` not declared in imported module {module}",
-                      file_path=pf.path, line=c.line)
+            self._record_call_result(source, pf, c, status="unresolved",
+                                     target_name=c.name,
+                                     provenance=f"function `{c.name}` not declared in imported module {module}")
             return True
         return False
 
@@ -474,18 +471,14 @@ class GraphBuilder:
 
         recv = c.receiver
         if recv == "<complex>":
-            self.counters["unresolved_calls"] += 1
-            self.edge("CALLS", source.id, None, status="unresolved",
-                      target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
-                      provenance="receiver is a call chain or complex expression; no static type available",
-                      file_path=pf.path, line=c.line)
+            self._record_call_result(source, pf, c, status="unresolved",
+                                     provenance="receiver is a call chain or complex expression; no static type available")
             return
         if recv == "super":
             if owner is None:
-                self.counters["unresolved_calls"] += 1
-                self.edge("CALLS", source.id, None, status="unresolved",
-                          target_name=c.name, provenance="super call outside a class",
-                          file_path=pf.path, line=c.line)
+                self._record_call_result(source, pf, c, status="unresolved",
+                                         target_name=c.name,
+                                         provenance="super call outside a class")
                 return
             for scope in owner.supers:
                 if scope.res.info is not None:
@@ -497,14 +490,13 @@ class GraphBuilder:
                         return
             ext = self.index.external_supers(owner)
             if ext:
-                self.edge("CALLS", source.id, None, status="external", target_name=f"{ext[0]}.{c.name}",
-                          provenance="super call to supertype outside repository",
-                          file_path=pf.path, line=c.line)
+                self._record_call_result(source, pf, c, status="external",
+                                         target_name=f"{ext[0]}.{c.name}",
+                                         provenance="super call to supertype outside repository")
             else:
-                self.counters["unresolved_calls"] += 1
-                self.edge("CALLS", source.id, None, status="unresolved",
-                          target_name=c.name, provenance="super method not found",
-                          file_path=pf.path, line=c.line)
+                self._record_call_result(source, pf, c, status="unresolved",
+                                         target_name=c.name,
+                                         provenance="super method not found")
             return
         if recv is None or recv == "this":
             if owner is not None:
@@ -533,17 +525,14 @@ class GraphBuilder:
                     imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
                     if imported_name == c.name and not imp.module and not imp.wildcard \
                             and imp.path not in self.index.types:
-                        self.edge("CALLS", source.id, None, status="external", target_name=imp.path,
-                                  provenance=f"imported function {imp.path} (outside repository)",
-                                  file_path=pf.path, line=c.line)
+                        self._record_call_result(source, pf, c, status="external",
+                                                 target_name=imp.path,
+                                                 provenance=f"imported function {imp.path} (outside repository)")
                         return
             ext = self.index.external_supers(owner) if owner else []
-            self.counters["unresolved_calls"] += 1
-            self.edge("CALLS", source.id, None, status="unresolved",
-                      target_name=f"{c.receiver + '.' if c.receiver and c.receiver != '<complex>' else ''}{c.name}",
-                      provenance="no matching declaration in repository"
-                                + (f"; may be inherited from {ext[0]}" if ext else "; may be a framework/library call"),
-                      file_path=pf.path, line=c.line)
+            self._record_call_result(source, pf, c, status="unresolved",
+                                     provenance="no matching declaration in repository"
+                                               + (f"; may be inherited from {ext[0]}" if ext else "; may be a framework/library call"))
             return
 
         if self._resolve_python_module_call(source, owner, c, ctx, pf):
@@ -568,11 +557,9 @@ class GraphBuilder:
         if r.status != "unresolved":
             self._resolve_call_on_type(source, c, pf, r, f"static/object access `{recv}`")
             return
-        self.counters["unresolved_calls"] += 1
-        self.edge("CALLS", source.id, None, status="unresolved",
-                  target_name=f"{recv}.{c.name}",
-                  provenance=f"receiver `{recv}` has no known declared type",
-                  file_path=pf.path, line=c.line)
+        self._record_call_result(source, pf, c, status="unresolved",
+                                 target_name=f"{recv}.{c.name}",
+                                 provenance=f"receiver `{recv}` has no known declared type")
 
     # ---- XML resources -----------------------------------------------------
     def add_layout(self, rel: str) -> None:
