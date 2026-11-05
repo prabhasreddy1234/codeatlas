@@ -464,80 +464,78 @@ class GraphBuilder:
                     return tn, self.index.context(declarer.pf, declarer.chain())
         return None, ctx
 
-    def _call(self, source: GraphNode, owner: Optional[TypeInfo], fi: Optional[FuncInfo],
-              c: CallSite, ctx: FileContext, pf: ParsedFile) -> None:
-        if self._resolve_constructor_call(source, c, ctx, pf):
-            return
-
-        recv = c.receiver
-        if recv == "<complex>":
+    def _resolve_super_call(self, source: GraphNode, owner: Optional[TypeInfo], fi: Optional[FuncInfo],
+                           c: CallSite, pf: ParsedFile) -> bool:
+        if c.receiver != "super":
+            return False
+        if owner is None:
             self._record_call_result(source, pf, c, status="unresolved",
-                                     provenance="receiver is a call chain or complex expression; no static type available")
-            return
-        if recv == "super":
-            if owner is None:
-                self._record_call_result(source, pf, c, status="unresolved",
-                                         target_name=c.name,
-                                         provenance="super call outside a class")
-                return
-            for scope in owner.supers:
-                if scope.res.info is not None:
-                    cands = self.index.find_methods(scope.res.info, c.name)
-                    chosen, st = self._pick_call_matches(c, cands)
-                    if chosen:
-                        self._emit_call_targets(source, c, pf, chosen, st,
-                                               f"super call via {scope.res.info.fqn}")
-                        return
-            ext = self.index.external_supers(owner)
-            if ext:
-                self._record_call_result(source, pf, c, status="external",
-                                         target_name=f"{ext[0]}.{c.name}",
-                                         provenance="super call to supertype outside repository")
-            else:
-                self._record_call_result(source, pf, c, status="unresolved",
-                                         target_name=c.name,
-                                         provenance="super method not found")
-            return
-        if recv is None or recv == "this":
-            if owner is not None:
-                for scope in owner.chain():
-                    cands = self.index.find_methods(scope, c.name)
-                    chosen, st = self._pick_call_matches(c, cands)
-                    if chosen:
-                        self._emit_call_targets(source, c, pf, chosen, st,
-                                               f"method of {scope.fqn} (or its supertypes)")
-                        return
-            if recv is None:
-                pkg = pf.package
-                fn_cands = list(self.index.functions.get(f"{pkg}.{c.name}" if pkg else c.name, []))
-                for imp in pf.imports:
-                    imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
-                    if not imp.wildcard and not imp.module and imported_name == c.name:
-                        fn_cands += self.index.functions.get(imp.path, [])
-                    elif imp.wildcard:
-                        fn_cands += self.index.functions.get(f"{imp.path}.{c.name}", [])
-                chosen, st = self._pick_call_matches(c, fn_cands)
+                                     target_name=c.name,
+                                     provenance="super call outside a class")
+            return True
+        for scope in owner.supers:
+            if scope.res.info is not None:
+                cands = self.index.find_methods(scope.res.info, c.name)
+                chosen, st = self._pick_call_matches(c, cands)
                 if chosen:
                     self._emit_call_targets(source, c, pf, chosen, st,
-                                           "top-level function (same package or import)")
-                    return
-                for imp in pf.imports:
-                    imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
-                    if imported_name == c.name and not imp.module and not imp.wildcard \
-                            and imp.path not in self.index.types:
-                        self._record_call_result(source, pf, c, status="external",
-                                                 target_name=imp.path,
-                                                 provenance=f"imported function {imp.path} (outside repository)")
-                        return
-            ext = self.index.external_supers(owner) if owner else []
+                                           f"super call via {scope.res.info.fqn}")
+                    return True
+        ext = self.index.external_supers(owner)
+        if ext:
+            self._record_call_result(source, pf, c, status="external",
+                                     target_name=f"{ext[0]}.{c.name}",
+                                     provenance="super call to supertype outside repository")
+        else:
             self._record_call_result(source, pf, c, status="unresolved",
-                                     provenance="no matching declaration in repository"
-                                               + (f"; may be inherited from {ext[0]}" if ext else "; may be a framework/library call"))
-            return
+                                     target_name=c.name,
+                                     provenance="super method not found")
+        return True
 
-        if self._resolve_python_module_call(source, owner, c, ctx, pf):
-            return
+    def _resolve_implicit_call(self, source: GraphNode, owner: Optional[TypeInfo], c: CallSite,
+                              pf: ParsedFile) -> bool:
+        recv = c.receiver
+        if recv not in (None, "this"):
+            return False
+        if owner is not None:
+            for scope in owner.chain():
+                cands = self.index.find_methods(scope, c.name)
+                chosen, st = self._pick_call_matches(c, cands)
+                if chosen:
+                    self._emit_call_targets(source, c, pf, chosen, st,
+                                           f"method of {scope.fqn} (or its supertypes)")
+                    return True
+        if recv is None:
+            pkg = pf.package
+            fn_cands = list(self.index.functions.get(f"{pkg}.{c.name}" if pkg else c.name, []))
+            for imp in pf.imports:
+                imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
+                if not imp.wildcard and not imp.module and imported_name == c.name:
+                    fn_cands += self.index.functions.get(imp.path, [])
+                elif imp.wildcard:
+                    fn_cands += self.index.functions.get(f"{imp.path}.{c.name}", [])
+            chosen, st = self._pick_call_matches(c, fn_cands)
+            if chosen:
+                self._emit_call_targets(source, c, pf, chosen, st,
+                                       "top-level function (same package or import)")
+                return True
+            for imp in pf.imports:
+                imported_name = imp.alias or imp.path.rsplit(".", 1)[-1]
+                if imported_name == c.name and not imp.module and not imp.wildcard \
+                        and imp.path not in self.index.types:
+                    self._record_call_result(source, pf, c, status="external",
+                                             target_name=imp.path,
+                                             provenance=f"imported function {imp.path} (outside repository)")
+                    return True
+        ext = self.index.external_supers(owner) if owner else []
+        self._record_call_result(source, pf, c, status="unresolved",
+                                 provenance="no matching declaration in repository"
+                                           + (f"; may be inherited from {ext[0]}" if ext else "; may be a framework/library call"))
+        return True
 
+    def _resolve_receiver_call(self, source: GraphNode, owner: Optional[TypeInfo], fi: Optional[FuncInfo],
+                              c: CallSite, ctx: FileContext, pf: ParsedFile) -> None:
+        recv = c.receiver
         parts = recv.split(".")
         if parts[0] == "this" and len(parts) == 2:
             tn, fctx = self._var_type(owner, fi, ctx, parts[1])
@@ -560,6 +558,24 @@ class GraphBuilder:
         self._record_call_result(source, pf, c, status="unresolved",
                                  target_name=f"{recv}.{c.name}",
                                  provenance=f"receiver `{recv}` has no known declared type")
+
+    def _call(self, source: GraphNode, owner: Optional[TypeInfo], fi: Optional[FuncInfo],
+              c: CallSite, ctx: FileContext, pf: ParsedFile) -> None:
+        if self._resolve_constructor_call(source, c, ctx, pf):
+            return
+
+        recv = c.receiver
+        if recv == "<complex>":
+            self._record_call_result(source, pf, c, status="unresolved",
+                                     provenance="receiver is a call chain or complex expression; no static type available")
+            return
+        if self._resolve_super_call(source, owner, fi, c, pf):
+            return
+        if self._resolve_implicit_call(source, owner, c, pf):
+            return
+        if self._resolve_python_module_call(source, owner, c, ctx, pf):
+            return
+        self._resolve_receiver_call(source, owner, fi, c, ctx, pf)
 
     # ---- XML resources -----------------------------------------------------
     def add_layout(self, rel: str) -> None:
