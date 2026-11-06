@@ -8,13 +8,14 @@ from ..schemas.graph import GraphDocument, RepositoryInfo
 from .builder import GraphBuilder
 from .java_extractor import parse_java
 from .kotlin_extractor import parse_kotlin
+from .model import ParsedFile
 from .python_extractor import parse_python
 from .scanner import scan
 
 Progress = Callable[..., None]  # stage, done, total, message, builder=...
 
 
-def _parse_source_file(rel: str, abs_path: Path, lang: str) -> object:
+def _parse_source_file(rel: str, abs_path: Path, lang: str) -> ParsedFile:
     data = abs_path.read_bytes()
     if lang == "kotlin":
         return parse_kotlin(rel, data)
