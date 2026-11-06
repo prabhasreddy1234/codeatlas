@@ -8,6 +8,8 @@ import httpx
 from ..config import Settings
 from ..errors import AppError
 
+GITHUB_PAGE_SIZE = 100
+
 
 class GitHubClient:
     """Thin GitHub REST client. The access token never leaves the backend."""
@@ -58,11 +60,11 @@ class GitHubClient:
     def _paginate(self, path: str, params: dict[str, Any], max_items: int) -> list[Any]:
         out, page = [], 1
         while len(out) < max_items:
-            data = self._get(path, {**params, "per_page": 100, "page": page})
+            data = self._get(path, {**params, "per_page": GITHUB_PAGE_SIZE, "page": page})
             if not data:
                 break
             out.extend(data)
-            if len(data) < 100:
+            if len(data) < GITHUB_PAGE_SIZE:
                 break
             page += 1
         return out[:max_items]
