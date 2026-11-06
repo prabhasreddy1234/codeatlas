@@ -69,9 +69,8 @@ class GraphStore:
         return (sha, path)
 
     def has(self, owner: str, repo: str, branch: str, sha: str) -> bool:
-        return self._graph_record(owner, repo, branch, sha) is not None and Path(
-            self._graph_record(owner, repo, branch, sha)[1]
-        ).exists()
+        record = self._graph_record(owner, repo, branch, sha)
+        return record is not None and Path(record[1]).exists()
 
     def load(self, owner: str, repo: str, branch: str, sha: str) -> GraphDocument | None:
         record = self._graph_record(owner, repo, branch, sha)
