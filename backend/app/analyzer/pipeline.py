@@ -10,6 +10,7 @@ from .java_extractor import parse_java
 from .kotlin_extractor import parse_kotlin
 from .model import ParsedFile
 from .python_extractor import parse_python
+from .resolver import SemanticProvider
 from .scanner import scan
 
 Progress = Callable[..., None]  # stage, done, total, message, builder=...
@@ -26,7 +27,8 @@ def _parse_source_file(rel: str, abs_path: Path, lang: str) -> ParsedFile:
 
 def analyze_repository(root: Path, owner: str, repo: str, branch: str, commit_sha: str, *,
                        max_file_bytes: int = 1_000_000, max_files: int = 20_000,
-                       progress: Optional[Progress] = None, provider=None) -> GraphDocument:
+                       progress: Optional[Progress] = None,
+                       provider: Optional[SemanticProvider] = None) -> GraphDocument:
     progress = progress or (lambda *a, **kw: None)
     progress("scanning", 0, 0, "Scanning source files")
     sc = scan(root, max_file_bytes, max_files)
