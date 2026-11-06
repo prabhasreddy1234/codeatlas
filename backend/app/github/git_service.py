@@ -25,7 +25,8 @@ class GitService:
         self.base.mkdir(parents=True, exist_ok=True)
 
     def repo_dir(self, owner: str, repo: str) -> Path:
-        validate_owner(owner), validate_repo(repo)
+        validate_owner(owner)
+        validate_repo(repo)
         p = (self.base / owner.lower() / repo.lower()).resolve()
         if self.base not in p.parents:
             raise AppError(400, "invalid_path", "Repository path escapes the workspace.")
@@ -95,7 +96,9 @@ class GitService:
 
     def sync(self, owner: str, repo: str, branch: str, token: Optional[str]) -> tuple[Path, str]:
         """Fetch the exact branch and check it out. Returns (worktree path, resolved commit SHA)."""
-        validate_owner(owner), validate_repo(repo), validate_branch(branch)
+        validate_owner(owner)
+        validate_repo(repo)
+        validate_branch(branch)
         repo_path = self.repo_dir(owner, repo)
         repo_path.mkdir(parents=True, exist_ok=True)
         self._initialize_repository(repo_path)
