@@ -23,10 +23,16 @@ def validate_repo(repo: str) -> str:
 
 
 def validate_branch(branch: str) -> str:
-    bad = (
-        not BRANCH_RE.match(branch or "") or branch.startswith(("-", "/")) or branch.endswith(("/", ".", ".lock"))
-        or ".." in branch or "//" in branch or "@{" in branch or "/." in branch or branch == "@"
-    )
-    if bad:
+    if not BRANCH_RE.match(branch or ""):
+        raise AppError(400, "invalid_branch", "Invalid branch name.")
+    if (
+        branch.startswith(("-", "/"))
+        or branch.endswith(("/", ".", ".lock"))
+        or ".." in branch
+        or "//" in branch
+        or "@{" in branch
+        or "/." in branch
+        or branch == "@"
+    ):
         raise AppError(400, "invalid_branch", "Invalid branch name.")
     return branch
