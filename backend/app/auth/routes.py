@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import secrets
 from urllib.parse import urlencode
 
@@ -14,6 +15,7 @@ from ..github.client import GitHubClient
 from .deps import SESSION_COOKIE, STATE_COOKIE, current_session, require_csrf
 
 router = APIRouter()
+log = logging.getLogger("codeatlas.auth")
 
 
 def _serializer(request: Request) -> URLSafeTimedSerializer:
@@ -165,8 +167,8 @@ def logout(request: Request, sess=Depends(require_csrf)):
             http.request("DELETE", f"{s.github_api_url}/applications/{s.github_client_id}/grant",
                          auth=(s.github_client_id, s.github_client_secret),
                          json={"access_token": sess.token})
-    except httpx.HTTPError:
-        pass
+    except httpx.HTTPError as exc:
+        log.warning("GitHub token revocation failed during logout: %s", type(exc).__name__)
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp
