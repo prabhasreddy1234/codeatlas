@@ -168,9 +168,8 @@ class JobManager:
         sha = remote["commit_sha"]
         if not force and self.store.has(owner, repo, branch, sha):
             doc = self.store.load(owner, repo, branch, sha)
-            self._set(key, state="ready", stage="ready", percent=100, commit_sha=sha, cached=True,
-                      message="Loaded existing graph for this commit", error=None, files_total=0, files_done=0,
-                      nodes=doc.nodes if doc else [], edges=doc.edges if doc else [])
+            self._set_ready_state(key, sha, cached=True,
+                                  message="Loaded existing graph for this commit", doc=doc)
             return self.status(owner, repo, branch).model_copy(update={"nodes": [], "edges": []})
 
         self._set(key, state="queued", stage="queued", percent=2, commit_sha=sha, cached=False,
